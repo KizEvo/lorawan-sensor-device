@@ -70,6 +70,27 @@ void TIM4_EnablePeripheral(void)
 	RCC->APB1ENR |= RCC_APB1ENR_TIM4EN;
 }
 
+void TIM2_EnablePeripheral_IT(void)
+{
+	RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;
+	
+	TIM2->CR1 |= TIM_CR1_URS;
+	
+	TIM2->DIER |= TIM_DIER_UIE;
+}
+
+void TIM2_Start_IT(void)
+{
+	// Enable counter
+	TIM2->CR1 |= TIM_CR1_CEN;
+}
+
+void TIM2_Disable_IT(void)
+{
+	// Disable counter
+	TIM2->CR1 &= ~(TIM_CR1_CEN);
+}
+
 void delay_us(uint32_t time_us)
 {
 	if (time_us > 10) {
@@ -143,8 +164,10 @@ int main(void)
   MX_GPIO_Init();
   MX_SPI1_Init();
   MX_TIM4_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
-	TIM4_EnablePeripheral();	
+	TIM4_EnablePeripheral();
+	TIM2_EnablePeripheral_IT();
 		
 	myLoRa = newLoRa();
 
@@ -188,7 +211,16 @@ int main(void)
 				HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
 			}
 		}
-		HAL_Delay(5000);
+		/* Start timer interrupt */
+		TIM2_Start_IT();
+		/* Suspend SYSTICK to not wake up from sleep */
+		HAL_SuspendTick();
+		/* Enter sleep mode, will be wake up by timer*/
+		HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
+		/* Start SYSTICK again */
+		HAL_ResumeTick();
+		/* Disable timer interrupt to process other things */
+		TIM2_Disable_IT();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
