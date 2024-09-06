@@ -188,7 +188,7 @@ int main(void)
 		LoRa_stat = 1;
 	}
 	if (LoRa_stat) {
-		LoRa_setSyncWord(&myLoRa, 0xF3);
+		LoRa_setSyncWord(&myLoRa, 0x12);
 	}
 	
 	if (dht11_init(&myDHT11) == 0) {
