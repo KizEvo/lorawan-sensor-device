@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F103xB</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include;../LoRa;../cc20_p1305;../MDK-ARM</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include;../LoRa;../cc20_p1305;../MDK-ARM;..\aes-cmac\include;..\secrets</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -579,6 +579,26 @@
               <FileName>dht11.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\dht11.c</FilePath>
+            </File>
+            <File>
+              <FileName>aes.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\aes-cmac\src\aes.c</FilePath>
+            </File>
+            <File>
+              <FileName>cmac.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\aes-cmac\src\cmac.c</FilePath>
+            </File>
+            <File>
+              <FileName>encrypt.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\aes-cmac\src\encrypt.c</FilePath>
+            </File>
+            <File>
+              <FileName>utils.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\aes-cmac\src\utils.c</FilePath>
             </File>
           </Files>
         </Group>
