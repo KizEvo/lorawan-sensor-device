@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F103xB</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include;../LoRa;../cc20_p1305;../MDK-ARM</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include;../LoRa;../MDK-ARM;..\aes;..\LoRaMAC</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -571,14 +571,19 @@
               <FilePath>..\LoRa\LoRa.c</FilePath>
             </File>
             <File>
-              <FileName>cc20_p1305.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\cc20_p1305\cc20_p1305.c</FilePath>
-            </File>
-            <File>
               <FileName>dht11.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\dht11.c</FilePath>
+            </File>
+            <File>
+              <FileName>aes.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\aes\aes.c</FilePath>
+            </File>
+            <File>
+              <FileName>loramac.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\LoRaMAC\loramac.c</FilePath>
             </File>
           </Files>
         </Group>

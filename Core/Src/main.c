@@ -26,6 +26,8 @@
 /* USER CODE BEGIN Includes */
 #include "LoRa.h"
 #include "dht11.h"
+#include "aes.h"
+#include "loramac.h"
 //#include "secrets.h"
 //#include "cc20_p1305.h"
 /* USER CODE END Includes */
@@ -194,6 +196,8 @@ int main(void)
 	if (dht11_init(&myDHT11) == 0) {
 		led_flashing(LED_GPIO_Port, LED_Pin, 5);
 	}
+	
+	struct loramac_phys_payload loramac = {0};
 
   /* USER CODE END 2 */
 
