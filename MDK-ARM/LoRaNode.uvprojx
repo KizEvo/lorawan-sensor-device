@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F103xB</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include;../LoRa;../MDK-ARM;..\aes;..\LoRaMAC</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include;../LoRa;../MDK-ARM;..\aes;..\LoRaMAC;..\asconmac\interface;..\secrets;..\asconmac\ref</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -584,6 +584,21 @@
               <FileName>loramac.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\LoRaMAC\loramac.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>asconmac</GroupName>
+          <Files>
+            <File>
+              <FileName>prf.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\asconmac\ref\prf.c</FilePath>
+            </File>
+            <File>
+              <FileName>printstate.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\asconmac\ref\printstate.c</FilePath>
             </File>
           </Files>
         </Group>

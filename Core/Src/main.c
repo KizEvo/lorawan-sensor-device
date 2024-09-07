@@ -28,6 +28,7 @@
 #include "dht11.h"
 #include "aes.h"
 #include "loramac.h"
+#include "secrets.h"
 //#include "secrets.h"
 //#include "cc20_p1305.h"
 /* USER CODE END Includes */
@@ -64,6 +65,12 @@ void SystemClock_Config(void);
 
 LoRa myLoRa;
 uint16_t LoRa_stat = 0;
+
+static uint32_t dev_addr = DEV_ADDR1;
+static uint8_t nwkskey[16] = {NWKSKEY1};
+static uint8_t appskey[16] = {APPSKEY1};
+
+static struct loramac_phys_payload *loramac_payload;
 
 dht11 myDHT11;
 
@@ -197,8 +204,10 @@ int main(void)
 		led_flashing(LED_GPIO_Port, LED_Pin, 5);
 	}
 	
-	struct loramac_phys_payload loramac = {0};
-
+	uint16_t loramac_f_cnt = 0;
+	loramac_payload = loramac_init();
+	loramac_fill_mac_payload(loramac_payload, 1, NULL);
+	loramac_fill_phys_payload(loramac_payload, LORAMAC_PHYS_PAYLOAD_MHDR_UNCONFIRM_DATA_UP, 0);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -208,7 +217,18 @@ int main(void)
 		if (LoRa_stat) {
 			if (dht11_read(&myDHT11) == 0) {
 				led_flashing(LED_GPIO_Port, LED_Pin, 2);
-				if (LoRa_transmit(&myLoRa, myDHT11.data, 5, 500)) {
+				
+				loramac_fill_fhdr(loramac_payload, dev_addr, 0, loramac_f_cnt, NULL);
+				loramac_fill_mac_payload(loramac_payload, 1, myDHT11.data);
+				loramac_f_cnt += 1;
+				uint32_t loramac_mic = 0;
+				loramac_frm_payload_encryption(loramac_payload, 5, appskey);
+				loramac_calculate_mic(loramac_payload, 5, nwkskey, 1, &loramac_mic); // 5 FRM_PAYLOAD + 1 MHDR + 7 FHDR + 1 FPORT
+				loramac_fill_phys_payload(loramac_payload, LORAMAC_PHYS_PAYLOAD_MHDR_UNCONFIRM_DATA_UP, loramac_mic);
+
+				uint8_t lora_package[18] = {0}; // 5 FRM_PAYLOAD + 13 LORAWAN protocol excepts FOPTS
+				loramac_serialize_data(loramac_payload, lora_package, 5);
+				if (LoRa_transmit(&myLoRa, lora_package, 18, 1000)) {
 					led_flashing(LED_GPIO_Port, LED_Pin, 5);
 				}
 			} else {
