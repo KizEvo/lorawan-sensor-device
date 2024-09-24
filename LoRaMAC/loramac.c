@@ -60,7 +60,7 @@ int32_t loramac_calculate_mic(struct loramac_phys_payload *payload, uint8_t frm_
 	uint8_t *B_dev_addr;
 	uint8_t *B_f_cnt;
 
-	memset(in, 0, frm_payload_size + 16);
+	memset(in, 0, inlen);
 
 	uint8_t B[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 	B[0] = 0x49;
