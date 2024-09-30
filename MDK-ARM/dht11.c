@@ -1,6 +1,5 @@
 #include "main.h"
 #include "dht11.h"
-#include <stdio.h>
 #include <string.h>
 
 #define DHT11_HIGH_LOW_COUNT_INIT_ERROR_OFFSET 130
@@ -44,7 +43,7 @@ int32_t dht11_init(dht11 *sensor)
 		}
 	}
 
-	while (HAL_GPIO_ReadPin(sensor->data_port, sensor->data_pin));
+	//while (HAL_GPIO_ReadPin(sensor->data_port, sensor->data_pin));
 	
 	return rc;
 }

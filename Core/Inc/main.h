@@ -65,8 +65,8 @@ void Error_Handler(void);
 #define RST_GPIO_Port GPIOB
 #define DIO0_Pin GPIO_PIN_10
 #define DIO0_GPIO_Port GPIOB
-#define DHT11_Pin GPIO_PIN_11
-#define DHT11_GPIO_Port GPIOB
+#define TRIG_HCSR04_Pin GPIO_PIN_9
+#define TRIG_HCSR04_GPIO_Port GPIOA
 
 /* USER CODE BEGIN Private defines */
 
