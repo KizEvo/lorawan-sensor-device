@@ -26,10 +26,13 @@
 /* USER CODE BEGIN Includes */
 #include "LoRa.h"
 //#include "dht11.h"
+#include "string.h"
 #include "HC_SR04.h"
 #include "aes.h"
 #include "loramac.h"
-//#include "secrets.h"
+#include "rc522.h"
+#include <stdlib.h>
+#include "secrets.h"
 //#include "cc20_p1305.h"
 /* USER CODE END Includes */
 
@@ -63,18 +66,34 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-#define TIME_SLEEP_MAX 5
+#define TIME_SLEEP_MAX 2
+#define PARKING_LOCATION_NUMBER 21
+#define COUNT_EMPTY_PARKING_LOT_MAX 40
 
+//HSCR_04 variable
 uint8_t distance_sensor;
-uint8_t available_parking_lot;
+uint8_t count_empty_time;
+uint8_t count_rfid;
+uint8_t is_parking_lot_empty = 0;
 
 LoRa myLoRa;
 uint16_t LoRa_stat = 0;
+/* the assumption is that FOPTS field is absent and payload is 5 bytes max => 18 */
+enum lorawan_mac_frame_offset {LORAWAN_MAC_HDR = 0, LORAWAN_DEVADDR = 1, LORAWAN_FCTRL = 5, LORAWAN_FCNT = 6, LORAWAN_FPORT = 8, LORAWAN_FRMPAYLOAD = 9, LORAWAN_MIC = 14};
 
+//RFID varable
+uint8_t rfid_status;
+uint8_t str[MAX_LEN]; // Max_LEN = 16
+uint8_t serial_num[5];
 
-
+volatile uint8_t time_sleep = 5;
+uint8_t lora_package[6] = {};
+//
 static struct loramac_phys_payload *loramac_payload;
 
+
+
+static uint8_t lorawan_frame_to_calc_mic[18] = {0};
 
 void TIM4_EnablePeripheral(void)
 {
@@ -179,9 +198,11 @@ int main(void)
   MX_TIM1_Init();
   MX_SPI2_Init();
   /* USER CODE BEGIN 2 */
+	HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_1);
 	TIM4_EnablePeripheral();
 	TIM2_EnablePeripheral_IT();
-		
+	
+	MFRC522_Init();
 	myLoRa = newLoRa();
 
 	myLoRa.CS_port         = NSS_GPIO_Port;
@@ -191,25 +212,33 @@ int main(void)
 	myLoRa.DIO0_port       = DIO0_GPIO_Port;
 	myLoRa.DIO0_pin        = DIO0_Pin;
 	myLoRa.hSPIx           = &hspi1;
-
+	
+	myLoRa.frequency             = 440;							  // default = 433 MHz
+	myLoRa.spredingFactor        = SF_7;							// default = SF_7
+	myLoRa.bandWidth			       = BW_125KHz;				  // default = BW_125KHz
+	myLoRa.crcRate				       = CR_4_5;						// default = CR_4_5
+	myLoRa.power					       = POWER_20db;				// default = 20db
+	myLoRa.overCurrentProtection = 120; 							// default = 100 mA
+	myLoRa.preamble				       = 10;		  					// default = 8;
 /*
 	myDHT11.data_port = DHT11_GPIO_Port;
 	myDHT11.data_pin = DHT11_Pin;
 */
 	HAL_Delay(3000);
-
+	LoRa_reset(&myLoRa);
 	if (LoRa_init(&myLoRa) == LORA_OK) {
 		LoRa_stat = 1;
 	}
-	if (LoRa_stat) {
-		LoRa_setSyncWord(&myLoRa, 0x12);
-	}
+//	if (LoRa_stat) {
+//	LoRa_setSyncWord(&myLoRa, 0x12);
+//	}
 	
 //	if (dht11_init(&myDHT11) == 0) {
 //		led_flashing(LED_GPIO_Port, LED_Pin, 5);
 //	}
 	
-	uint8_t time_sleep = 5;
+	
+	uint8_t package_count = 0;
 	
 	uint16_t loramac_f_cnt = 0;
 	loramac_payload = loramac_init();
@@ -221,8 +250,68 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-		distance_sensor = HCSR04_GetDis();
-		
+		if (time_sleep >= TIME_SLEEP_MAX) {
+			time_sleep = 0;
+			if (LoRa_stat) {
+				while (str[4] == 0) {
+						rfid_status = MFRC522_Request(PICC_REQIDL, str);
+						rfid_status = MFRC522_Anticoll(str);
+						if ( str[4] != 0 && str[4] != serial_num[4] ) {
+							memcpy(serial_num, str, 5);
+						}
+						if((str[0]==115) && (str[1]==38) && (str[2]==248) && (str[3]==40) && (str[4]==133) )
+						{
+							led_flashing(GPIOC, GPIO_PIN_13,1);
+						}
+				}
+				for (int i = 0; i++ < COUNT_EMPTY_PARKING_LOT_MAX;) {
+						distance_sensor = HCSR04_GetDis();
+						if  (distance_sensor > 30) {
+								count_empty_time ++;
+								HAL_Delay(100);
+						}
+				}
+				if ( count_empty_time >= COUNT_EMPTY_PARKING_LOT_MAX - 5) {
+						HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+						is_parking_lot_empty = 1	;
+				} else {
+						is_parking_lot_empty = 0;
+				}
+				count_empty_time = 0;
+					
+				/*
+					loramac_fill_fhdr(loramac_payload, dev_addr, 0, loramac_f_cnt, NULL);
+  				loramac_fill_mac_payload(loramac_payload, 1, myDHT11.data);
+					loramac_f_cnt += 1;
+					uint32_t loramac_mic = 0;
+					loramac_frm_payload_encryption(loramac_payload, 5, appskey);
+					loramac_calculate_mic(loramac_payload, 5, nwkskey, 1, &loramac_mic); // 5 FRM_PAYLOAD + 1 MHDR + 7 FHDR + 1 FPORT
+					loramac_fill_phys_payload(loramac_payload, LORAMAC_PHYS_PAYLOAD_MHDR_UNCONFIRM_DATA_UP, loramac_mic);
+				*/
+				
+					//uint8_t lora_package[18] = {0}; // 5 FRM_PAYLOAD + 13 LORAWAN protocol excepts FOPTS
+
+				memcpy(lora_package, serial_num, 5);
+				lora_package[5] = is_parking_lot_empty * PARKING_LOCATION_NUMBER;
+								//loramac_serialize_data(loramac_payload, lora_package, 5);
+				if (LoRa_transmit(&myLoRa, (uint8_t*)lora_package, 6, TRANSMIT_TIMEOUT)) {
+					led_flashing(LED_GPIO_Port, LED_Pin, 5);
+					HAL_Delay(1500);
+				}
+				str[4] = 0;
+			}
+		}
+		/* Start timer interrupt */
+		TIM2_Start_IT();
+		/* Suspend SYSTICK to not wake up from sleep */
+		HAL_SuspendTick();
+		/* Enter sleep mode, will be wake up by timer*/
+		HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
+		/* Start SYSTICK again */
+		HAL_ResumeTick();
+		/* Disable timer interrupt to process other things */
+		TIM2_Disable_IT();
+		time_sleep++;
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -279,7 +368,7 @@ void SystemClock_Config(void)
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
+  /* User can add his own impflementation to report the HAL error return state */
   __disable_irq();
   while (1)
   {

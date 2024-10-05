@@ -10,7 +10,7 @@
 
 		returns     : A LoRa object whith these default values:
 											----------------------------------------
-										  |   carrier frequency = 923 MHz        |
+										  |   carrier frequency = 440 MHz        |
 										  |    spreading factor = 7				       |
 											|           bandwidth = 125 KHz        |
 											| 		    coding rate = 4/5            |
@@ -19,7 +19,7 @@
 LoRa newLoRa(){
 	LoRa new_LoRa;
 
-	new_LoRa.frequency             = 921       ;
+	new_LoRa.frequency             = 440       ;
 	new_LoRa.spredingFactor        = SF_7      ;
 	new_LoRa.bandWidth			   = BW_125KHz ;
 	new_LoRa.crcRate               = CR_4_5    ;

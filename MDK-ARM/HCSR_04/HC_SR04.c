@@ -4,7 +4,7 @@
 #include <stdlib.h>
 
 extern void delay_us(uint32_t time_us);
-
+extern void led_flashing(GPIO_TypeDef *port, uint16_t pin, uint8_t time);
 extern TIM_HandleTypeDef htim1;
 
 uint32_t IC_Val1 = 0;
@@ -50,11 +50,10 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 	}
 }
 
-
 uint8_t HCSR04_GetDis (void)
 {
 	HAL_GPIO_WritePin(TRIG_PORT, TRIG_PIN, GPIO_PIN_SET);  // pull the TRIG pin HIGH
-	delay_us(10);  
+	delay_us(10); 
 	HAL_GPIO_WritePin(TRIG_PORT, TRIG_PIN, GPIO_PIN_RESET);  // pull the TRIG pin low
 
 	__HAL_TIM_ENABLE_IT(&htim1, TIM_IT_CC1);
