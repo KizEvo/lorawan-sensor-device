@@ -66,28 +66,38 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-#define TIME_SLEEP_MAX 2
-#define PARKING_LOCATION_NUMBER 21
+#define TIME_SLEEP_MAX 1
+#define PARKING_LOCATION_FLOOR 2
+#define PARKING_LOCATION_ROW 0xA
+#define PARKING_LOCATION_COLUMN 0x5
 #define COUNT_EMPTY_PARKING_LOT_MAX 40
 
 //HSCR_04 variable
 uint8_t distance_sensor;
 uint8_t count_empty_time;
+uint8_t count_sensor_get_dirty;
 uint8_t count_rfid;
-uint8_t is_parking_lot_empty = 0;
+uint8_t parking_lot_state = 0;
+enum state_of_parkinglot {PARKING_LOT_EMTPY = 0, PARKING_LOT_IS_AVAILABLE = 1, SENSOR_IS_DIRTY = 2};
 
 LoRa myLoRa;
 uint16_t LoRa_stat = 0;
-/* the assumption is that FOPTS field is absent and payload is 5 bytes max => 18 */
-enum lorawan_mac_frame_offset {LORAWAN_MAC_HDR = 0, LORAWAN_DEVADDR = 1, LORAWAN_FCTRL = 5, LORAWAN_FCNT = 6, LORAWAN_FPORT = 8, LORAWAN_FRMPAYLOAD = 9, LORAWAN_MIC = 14};
+
+
+/* the assumption is that FOPTS field is absent and payload is 2 bytes max => 15 */
+enum lorawan_mac_frame_offset {LORAWAN_MAC_HDR = 0, LORAWAN_DEVADDR = 1, LORAWAN_FCTRL = 5, LORAWAN_FCNT = 6, LORAWAN_FPORT = 8, LORAWAN_FRMPAYLOAD = 9, LORAWAN_MIC = 11};
 
 //RFID varable
 uint8_t rfid_status;
 uint8_t str[MAX_LEN]; // Max_LEN = 16
 uint8_t serial_num[5];
 
-volatile uint8_t time_sleep = 5;
-uint8_t lora_package[6] = {};
+static uint32_t dev_addr = DEV_ADDR1;
+static uint8_t nwkskey[16] = {NWKSKEY1};
+static uint8_t appskey[16] = {APPSKEY1};
+
+volatile uint8_t time_sleep = TIME_SLEEP_MAX;
+uint8_t data_transmit[2] = {};
 //
 static struct loramac_phys_payload *loramac_payload;
 
@@ -213,7 +223,7 @@ int main(void)
 	myLoRa.DIO0_pin        = DIO0_Pin;
 	myLoRa.hSPIx           = &hspi1;
 	
-	myLoRa.frequency             = 440;							  // default = 433 MHz
+	myLoRa.frequency             = 921;							  // default = 433 MHz
 	myLoRa.spredingFactor        = SF_7;							// default = SF_7
 	myLoRa.bandWidth			       = BW_125KHz;				  // default = BW_125KHz
 	myLoRa.crcRate				       = CR_4_5;						// default = CR_4_5
@@ -229,9 +239,9 @@ int main(void)
 	if (LoRa_init(&myLoRa) == LORA_OK) {
 		LoRa_stat = 1;
 	}
-//	if (LoRa_stat) {
-//	LoRa_setSyncWord(&myLoRa, 0x12);
-//	}
+  if (LoRa_stat) {
+		LoRa_setSyncWord(&myLoRa, 0x12);
+	}
 	
 //	if (dht11_init(&myDHT11) == 0) {
 //		led_flashing(LED_GPIO_Port, LED_Pin, 5);
@@ -253,48 +263,40 @@ int main(void)
 		if (time_sleep >= TIME_SLEEP_MAX) {
 			time_sleep = 0;
 			if (LoRa_stat) {
-				while (str[4] == 0) {
-						rfid_status = MFRC522_Request(PICC_REQIDL, str);
-						rfid_status = MFRC522_Anticoll(str);
-						if ( str[4] != 0 && str[4] != serial_num[4] ) {
-							memcpy(serial_num, str, 5);
-						}
-						if((str[0]==115) && (str[1]==38) && (str[2]==248) && (str[3]==40) && (str[4]==133) )
-						{
-							led_flashing(GPIOC, GPIO_PIN_13,1);
-						}
-				}
 				for (int i = 0; i++ < COUNT_EMPTY_PARKING_LOT_MAX;) {
 						distance_sensor = HCSR04_GetDis();
-						if  (distance_sensor > 30) {
+						if  (distance_sensor > 40) {
 								count_empty_time ++;
-								HAL_Delay(100);
+								HAL_Delay(200);
+						} else if (distance_sensor < 5) {
+								count_sensor_get_dirty++;
 						}
 				}
-				if ( count_empty_time >= COUNT_EMPTY_PARKING_LOT_MAX - 5) {
-						HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
-						is_parking_lot_empty = 1	;
+				if ( count_empty_time >= (COUNT_EMPTY_PARKING_LOT_MAX - 15)) {
+						parking_lot_state =  PARKING_LOT_EMTPY	;
+				} else if (count_sensor_get_dirty >= 12) {
+						parking_lot_state =  SENSOR_IS_DIRTY;
 				} else {
-						is_parking_lot_empty = 0;
+						parking_lot_state = PARKING_LOT_IS_AVAILABLE;
 				}
-				count_empty_time = 0;
-					
-				/*
-					loramac_fill_fhdr(loramac_payload, dev_addr, 0, loramac_f_cnt, NULL);
-  				loramac_fill_mac_payload(loramac_payload, 1, myDHT11.data);
-					loramac_f_cnt += 1;
-					uint32_t loramac_mic = 0;
-					loramac_frm_payload_encryption(loramac_payload, 5, appskey);
-					loramac_calculate_mic(loramac_payload, 5, nwkskey, 1, &loramac_mic); // 5 FRM_PAYLOAD + 1 MHDR + 7 FHDR + 1 FPORT
-					loramac_fill_phys_payload(loramac_payload, LORAMAC_PHYS_PAYLOAD_MHDR_UNCONFIRM_DATA_UP, loramac_mic);
-				*/
 				
-					//uint8_t lora_package[18] = {0}; // 5 FRM_PAYLOAD + 13 LORAWAN protocol excepts FOPTS
+				data_transmit[0] = parking_lot_state << 2 | PARKING_LOCATION_FLOOR;
+				data_transmit[1] = PARKING_LOCATION_COLUMN << 4 | PARKING_LOCATION_ROW;
+				
+				count_empty_time = 0;
+				count_sensor_get_dirty = 0;
+				
+				loramac_fill_fhdr(loramac_payload, dev_addr, 0, loramac_f_cnt, NULL);
+  			loramac_fill_mac_payload(loramac_payload, 1, data_transmit);
+				loramac_f_cnt += 1;
+				uint32_t loramac_mic = 0;
+				loramac_frm_payload_encryption(loramac_payload, 2, appskey);
+				loramac_calculate_mic(loramac_payload, 2, nwkskey, 1, &loramac_mic); // 2 FRM_PAYLOAD + 1 MHDR + 7 FHDR + 1 FPORT
+				loramac_fill_phys_payload(loramac_payload, LORAMAC_PHYS_PAYLOAD_MHDR_UNCONFIRM_DATA_UP, loramac_mic);
+				uint8_t lora_package[15] = {0}; // 2 FRM_PAYLOAD + 13 LORAWAN protocol excepts FOPTS
+				loramac_serialize_data(loramac_payload, lora_package, 2);
 
-				memcpy(lora_package, serial_num, 5);
-				lora_package[5] = is_parking_lot_empty * PARKING_LOCATION_NUMBER;
-								//loramac_serialize_data(loramac_payload, lora_package, 5);
-				if (LoRa_transmit(&myLoRa, (uint8_t*)lora_package, 6, TRANSMIT_TIMEOUT)) {
+				if (LoRa_transmit(&myLoRa, (uint8_t*)lora_package, 15, TRANSMIT_TIMEOUT)) {
 					led_flashing(LED_GPIO_Port, LED_Pin, 5);
 					HAL_Delay(1500);
 				}
