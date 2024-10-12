@@ -19,3 +19,9 @@ The microcontroller in used is STM32F103C8T6. Current sensor module is the tempe
 
 ![image](https://github.com/user-attachments/assets/213b1a16-a907-47f1-b459-9f114215d6a9)
 
+## Prototype Device
+A prototype sensor device, since using wires and jumpers on a breadboard sometime leads to bad connection between interfaces this help in better development experience.
+
+This also help test the range of the sensor device to gateway.
+
+![image](https://github.com/user-attachments/assets/c76c6970-2986-4d8a-ac9b-efb79c89ba3b)
