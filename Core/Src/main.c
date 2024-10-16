@@ -30,7 +30,7 @@
 #include "HC_SR04.h"
 #include "aes.h"
 #include "loramac.h"
-#include "rc522.h"
+//#include "rc522.h"
 #include <stdlib.h>
 #include "secrets.h"
 //#include "cc20_p1305.h"
@@ -67,10 +67,14 @@ void SystemClock_Config(void);
 /* USER CODE BEGIN 0 */
 
 #define TIME_SLEEP_MAX 1
-#define PARKING_LOCATION_FLOOR 2
-#define PARKING_LOCATION_ROW 0xA
-#define PARKING_LOCATION_COLUMN 0x5
 #define COUNT_EMPTY_PARKING_LOT_MAX 40
+
+
+uint8_t parking_location_floor = 0x1;
+uint8_t parking_location_row = 0x1;
+uint8_t parking_location_column = 0x1;
+uint64_t FREQUENCY_MAX = 920200000;
+
 
 //HSCR_04 variable
 uint8_t distance_sensor;
@@ -83,14 +87,12 @@ enum state_of_parkinglot {PARKING_LOT_EMTPY = 0, PARKING_LOT_IS_AVAILABLE = 1, S
 LoRa myLoRa;
 uint16_t LoRa_stat = 0;
 
+uint32_t previousMillis = 0;
+uint32_t currentMillis = 0;
 
 /* the assumption is that FOPTS field is absent and payload is 2 bytes max => 15 */
 enum lorawan_mac_frame_offset {LORAWAN_MAC_HDR = 0, LORAWAN_DEVADDR = 1, LORAWAN_FCTRL = 5, LORAWAN_FCNT = 6, LORAWAN_FPORT = 8, LORAWAN_FRMPAYLOAD = 9, LORAWAN_MIC = 11};
 
-//RFID varable
-uint8_t rfid_status;
-uint8_t str[MAX_LEN]; // Max_LEN = 16
-uint8_t serial_num[5];
 
 static uint32_t dev_addr = DEV_ADDR1;
 static uint8_t nwkskey[16] = {NWKSKEY1};
@@ -98,13 +100,35 @@ static uint8_t appskey[16] = {APPSKEY1};
 
 volatile uint8_t time_sleep = TIME_SLEEP_MAX;
 uint8_t data_transmit[2] = {};
+uint8_t data_transmit_before[2] = {};
 //
 static struct loramac_phys_payload *loramac_payload;
 
 
 
 static uint8_t lorawan_frame_to_calc_mic[18] = {0};
-
+void LoRa_SetFreq(LoRa* _LoRa, uint64_t freq) {
+             uint32_t frf; 
+             uint8_t data; 
+						
+						 frf = ((uint64_t)freq * 524288) / 32000000;
+	
+						 data = frf >> 16;
+             LoRa_write(_LoRa, RegFrMsb, data);
+						 HAL_Delay(5);
+             
+						 data = frf >> 8;
+             LoRa_write(_LoRa, RegFrMid, data);
+						 HAL_Delay(5);
+	
+             data = frf >> 0;
+             LoRa_write(_LoRa, RegFrLsb, data);
+						 HAL_Delay(5);
+}    
+void delay_ms(uint32_t time) {
+		uint64_t waiting = time * 64000;
+		while(waiting--) {}
+}
 void TIM4_EnablePeripheral(void)
 {
 	RCC->APB1ENR |= RCC_APB1ENR_TIM4EN;
@@ -206,13 +230,13 @@ int main(void)
   MX_TIM4_Init();
   MX_TIM2_Init();
   MX_TIM1_Init();
-  MX_SPI2_Init();
   /* USER CODE BEGIN 2 */
+//	delay_ms(10000);
 	HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_1);
-	TIM4_EnablePeripheral();
+  TIM4_EnablePeripheral();
 	TIM2_EnablePeripheral_IT();
 	
-	MFRC522_Init();
+//	MFRC522_Init();
 	myLoRa = newLoRa();
 
 	myLoRa.CS_port         = NSS_GPIO_Port;
@@ -222,18 +246,18 @@ int main(void)
 	myLoRa.DIO0_port       = DIO0_GPIO_Port;
 	myLoRa.DIO0_pin        = DIO0_Pin;
 	myLoRa.hSPIx           = &hspi1;
-	
-	myLoRa.frequency             = 921;							  // default = 433 MHz
-	myLoRa.spredingFactor        = SF_7;							// default = SF_7
-	myLoRa.bandWidth			       = BW_125KHz;				  // default = BW_125KHz
-	myLoRa.crcRate				       = CR_4_5;						// default = CR_4_5
-	myLoRa.power					       = POWER_20db;				// default = 20db
-	myLoRa.overCurrentProtection = 120; 							// default = 100 mA
-	myLoRa.preamble				       = 10;		  					// default = 8;
+	myLoRa.frequency             = FREQUENCY_MAX;							  // default = 433 MHz
+//	myLoRa.spredingFactor        = SF_7;							// default = SF_7
+//	myLoRa.bandWidth			       = BW_125KHz;				  // default = BW_125KHz
+//	myLoRa.crcRate				       = CR_4_5;						// default = CR_4_5
+//	myLoRa.power					       = POWER_20db;				// default = 20db
+//	myLoRa.overCurrentProtection = 120; 							// default = 100 mA
+//	myLoRa.preamble				       = 10;		  					// default = 8;
 /*
 	myDHT11.data_port = DHT11_GPIO_Port;
 	myDHT11.data_pin = DHT11_Pin;
 */
+
 	HAL_Delay(3000);
 	LoRa_reset(&myLoRa);
 	if (LoRa_init(&myLoRa) == LORA_OK) {
@@ -242,7 +266,8 @@ int main(void)
   if (LoRa_stat) {
 		LoRa_setSyncWord(&myLoRa, 0x12);
 	}
-	
+	LoRa_setFrequency(&myLoRa, FREQUENCY_MAX);
+
 //	if (dht11_init(&myDHT11) == 0) {
 //		led_flashing(LED_GPIO_Port, LED_Pin, 5);
 //	}
@@ -260,6 +285,8 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+		HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+		delay_ms(500);
 		if (time_sleep >= TIME_SLEEP_MAX) {
 			time_sleep = 0;
 			if (LoRa_stat) {
@@ -280,27 +307,27 @@ int main(void)
 						parking_lot_state = PARKING_LOT_IS_AVAILABLE;
 				}
 				
-				data_transmit[0] = parking_lot_state << 2 | PARKING_LOCATION_FLOOR;
-				data_transmit[1] = PARKING_LOCATION_COLUMN << 4 | PARKING_LOCATION_ROW;
-				
+				data_transmit[0] = parking_lot_state << 2 | parking_location_floor;
+				data_transmit[1] = parking_location_column << 4 | parking_location_row;
+				//reset counter of HCSR_04
 				count_empty_time = 0;
 				count_sensor_get_dirty = 0;
-				
-				loramac_fill_fhdr(loramac_payload, dev_addr, 0, loramac_f_cnt, NULL);
-  			loramac_fill_mac_payload(loramac_payload, 1, data_transmit);
-				loramac_f_cnt += 1;
-				uint32_t loramac_mic = 0;
-				loramac_frm_payload_encryption(loramac_payload, 2, appskey);
-				loramac_calculate_mic(loramac_payload, 2, nwkskey, 1, &loramac_mic); // 2 FRM_PAYLOAD + 1 MHDR + 7 FHDR + 1 FPORT
-				loramac_fill_phys_payload(loramac_payload, LORAMAC_PHYS_PAYLOAD_MHDR_UNCONFIRM_DATA_UP, loramac_mic);
-				uint8_t lora_package[15] = {0}; // 2 FRM_PAYLOAD + 13 LORAWAN protocol excepts FOPTS
-				loramac_serialize_data(loramac_payload, lora_package, 2);
-
-				if (LoRa_transmit(&myLoRa, (uint8_t*)lora_package, 15, TRANSMIT_TIMEOUT)) {
-					led_flashing(LED_GPIO_Port, LED_Pin, 5);
-					HAL_Delay(1500);
+				if (	(data_transmit[0] != data_transmit_before[0]) ||  (data_transmit[1] != data_transmit_before[1])) {
+						data_transmit_before[0] = data_transmit[0];
+						data_transmit_before[1] = data_transmit[1];
+						loramac_fill_fhdr(loramac_payload, dev_addr, 0, loramac_f_cnt, NULL);
+						loramac_fill_mac_payload(loramac_payload, 1, data_transmit);
+						loramac_f_cnt += 1;
+						uint32_t loramac_mic = 0;
+						loramac_frm_payload_encryption(loramac_payload, 2, appskey);
+						loramac_calculate_mic(loramac_payload, 2, nwkskey, 1, &loramac_mic); // 2 FRM_PAYLOAD + 1 MHDR + 7 FHDR + 1 FPORT
+						loramac_fill_phys_payload(loramac_payload, LORAMAC_PHYS_PAYLOAD_MHDR_UNCONFIRM_DATA_UP, loramac_mic);
+						uint8_t lora_package[15] = {0}; // 2 FRM_PAYLOAD + 13 LORAWAN protocol excepts FOPTS
+						loramac_serialize_data(loramac_payload, lora_package, 2);
+						if (LoRa_transmit(&myLoRa, (uint8_t*)lora_package, 15, TRANSMIT_TIMEOUT)) {
+									led_flashing(LED_GPIO_Port, LED_Pin, 5);
+						}
 				}
-				str[4] = 0;
 			}
 		}
 		/* Start timer interrupt */
@@ -360,7 +387,29 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  currentMillis = HAL_GetTick();
+  if (GPIO_Pin == GPIO_PIN_13 && (currentMillis - previousMillis > 10))
+  {
+		parking_location_row++;
+		if (parking_location_row > 4) {
+				parking_location_column++;
+				parking_location_row = 1;
+				if (parking_location_column > 2) {
+						parking_location_column = 1;
+				}
+		}
+		HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+    previousMillis = currentMillis;
+  }
+  if (GPIO_Pin == GPIO_PIN_12 && (currentMillis - previousMillis > 10))
+  {
+		parking_location_floor = (parking_location_floor == 1) ? 2 : 1;
+		HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+    previousMillis = currentMillis;
+  }
+}
 /* USER CODE END 4 */
 
 /**

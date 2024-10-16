@@ -49,11 +49,14 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 		}
 	}
 }
-
+void delay_us_HCSR04(uint16_t time) {
+		__HAL_TIM_SET_COUNTER(&htim1, 0);
+		while( __HAL_TIM_GET_COUNTER(&htim1) < time);
+}
 uint8_t HCSR04_GetDis (void)
 {
 	HAL_GPIO_WritePin(TRIG_PORT, TRIG_PIN, GPIO_PIN_SET);  // pull the TRIG pin HIGH
-	delay_us(10); 
+	delay_us_HCSR04(10); 
 	HAL_GPIO_WritePin(TRIG_PORT, TRIG_PIN, GPIO_PIN_RESET);  // pull the TRIG pin low
 
 	__HAL_TIM_ENABLE_IT(&htim1, TIM_IT_CC1);

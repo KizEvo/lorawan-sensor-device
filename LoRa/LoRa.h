@@ -98,7 +98,7 @@ typedef struct LoRa_setting{
 	
 	// Module settings:
 	int			current_mode;
-	int 			frequency;
+	uint32_t 			frequency;
 	uint8_t			spredingFactor;
 	uint8_t			bandWidth;
 	uint8_t			crcRate;
@@ -120,7 +120,7 @@ uint8_t LoRa_isvalid(LoRa* _LoRa);
 
 void LoRa_setLowDaraRateOptimization(LoRa* _LoRa, uint8_t value);
 void LoRa_setAutoLDO(LoRa* _LoRa);
-void LoRa_setFrequency(LoRa* _LoRa, int freq);
+void LoRa_setFrequency(LoRa* _LoRa, uint32_t freq);
 void LoRa_setSpreadingFactor(LoRa* _LoRa, int SP);
 void LoRa_setPower(LoRa* _LoRa, uint8_t power);
 void LoRa_setOCP(LoRa* _LoRa, uint8_t current);
