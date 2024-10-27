@@ -23,7 +23,7 @@ LoRa newLoRa(){
 	new_LoRa.spredingFactor        = SF_7      ;
 	new_LoRa.bandWidth			   = BW_125KHz ;
 	new_LoRa.crcRate               = CR_4_5    ;
-	new_LoRa.power				   = POWER_20db;
+	new_LoRa.power				   = POWER_14db;
 	new_LoRa.overCurrentProtection = 100       ;
 	new_LoRa.preamble			   = 8         ;
 
