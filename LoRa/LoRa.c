@@ -19,10 +19,10 @@
 LoRa newLoRa(){
 	LoRa new_LoRa;
 
-	new_LoRa.frequency             = 921       ;
+	new_LoRa.frequency             = 921400000       ;
 	new_LoRa.spredingFactor        = SF_7      ;
 	new_LoRa.bandWidth			   = BW_125KHz ;
-	new_LoRa.crcRate               = CR_4_5    ;
+	new_LoRa.crcRate               = CR_4_8    ;
 	new_LoRa.power				   = POWER_14db;
 	new_LoRa.overCurrentProtection = 100       ;
 	new_LoRa.preamble			   = 8         ;
@@ -183,18 +183,18 @@ void LoRa_setAutoLDO(LoRa* _LoRa){
 /* ----------------------------------------------------------------------------- *\
 		name        : LoRa_setFrequency
 
-		description : set carrier frequency e.g 433 MHz
+		description : set carrier frequency e.g 920200000 Hz
 
 		arguments   :
 			LoRa* LoRa        --> LoRa object handler
-			int   freq        --> desired frequency in MHz unit, e.g 434
+			int   freq        --> desired frequency in MHz unit, e.g 920200000 Hz
 
 		returns     : Nothing
 \* ----------------------------------------------------------------------------- */
-void LoRa_setFrequency(LoRa* _LoRa, int freq){
+void LoRa_setFrequency(LoRa* _LoRa, uint32_t _freq){
 	uint8_t  data;
 	uint32_t F;
-	F = (freq * 524288)>>5;
+	F = ((uint64_t)((uint64_t)_freq * 524288) / (uint32_t)32000000);
 
 	// write Msb:
 	data = F >> 16;
