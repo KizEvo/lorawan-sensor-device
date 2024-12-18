@@ -63,16 +63,23 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-#define TIME_SLEEP_MAX 5
+#define TIME_SLEEP_MAX 1
+#define RX_BUFFER_SIZE 255
 
-LoRa myLoRa;
-uint16_t LoRa_stat = 0;
+enum PROG_FSM {INIT, MCU_SLEEP, LORA_TX, LORA_RX, LORA_GPIO_INT, LORA_TIMER_INT};
+static volatile uint32_t prog_fsm = 0;
+
+static LoRa myLoRa;
+static uint16_t LoRa_stat = 0;
 
 static uint32_t dev_addr = DEV_ADDR1;
 static uint8_t nwkskey[16] = {NWKSKEY1};
 static uint8_t appskey[16] = {APPSKEY1};
 
 static struct loramac_phys_payload *loramac_payload;
+
+static volatile uint8_t lorawan_rx_buffer[RX_BUFFER_SIZE];
+static volatile uint8_t lorawan_is_tx;
 
 dht11 myDHT11;
 
@@ -152,7 +159,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+	prog_fsm = INIT;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -201,7 +208,7 @@ int main(void)
 	if (LoRa_stat) {
 		LoRa_setSyncWord(&myLoRa, 0x12);
 	}
-	
+	LoRa_startReceiving(&myLoRa);
 	if (dht11_init(&myDHT11) == 0) {
 		led_flashing(LED_GPIO_Port, LED_Pin, 5);
 	}
@@ -222,6 +229,7 @@ int main(void)
 			time_sleep = 0;
 			if (LoRa_stat) {
 				if (dht11_read(&myDHT11) == 0) {
+					prog_fsm = LORA_TX;
 					led_flashing(LED_GPIO_Port, LED_Pin, 2);
 					
 					loramac_fill_fhdr(loramac_payload, dev_addr, 0, loramac_f_cnt, NULL);
@@ -234,20 +242,32 @@ int main(void)
 
 					uint8_t lora_package[18] = {0}; // 5 FRM_PAYLOAD + 13 LORAWAN protocol excepts FOPTS
 					loramac_serialize_data(loramac_payload, lora_package, 5);
+					LoRa_gotoMode(&myLoRa, STNBY_MODE);
+					LoRa_setFrequency(&myLoRa, 920400000);
 					if (LoRa_transmit(&myLoRa, lora_package, 18, 1000)) {
 						led_flashing(LED_GPIO_Port, LED_Pin, 5);
 					}
 				} else {
 					HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
 				}
+				LoRa_gotoMode(&myLoRa, STNBY_MODE);
+				LoRa_setFrequency(&myLoRa, 921400000);
+				LoRa_startReceiving(&myLoRa);
+				prog_fsm = LORA_RX;
 			}
 		}
 		/* Start timer interrupt */
 		TIM2_Start_IT();
 		/* Suspend SYSTICK to not wake up from sleep */
 		HAL_SuspendTick();
+		prog_fsm = MCU_SLEEP;
 		/* Enter sleep mode, will be wake up by timer*/
 		HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
+		/* Check if wake from GPIO_EXTI */
+		while (prog_fsm == LORA_GPIO_INT) {
+			/* Sleep again */
+			HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
+		}
 		/* Start SYSTICK again */
 		HAL_ResumeTick();
 		/* Disable timer interrupt to process other things */
@@ -300,7 +320,27 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+	if (htim->Instance == TIM2) {
+		// Unused
+	}
+	prog_fsm = LORA_TIMER_INT;
+}
 
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+	if (prog_fsm == MCU_SLEEP || prog_fsm == LORA_RX) {
+		if (GPIO_Pin == DIO0_Pin) {
+			int byte_received = LoRa_receive(&myLoRa, lorawan_rx_buffer, RX_BUFFER_SIZE);
+		}
+	}
+	/* This prevents overwriting state when TIMER interrupt is served first then GPIO later */
+	if (prog_fsm != LORA_TIMER_INT) {
+		prog_fsm = LORA_GPIO_INT;
+	}
+	lorawan_is_tx = 0;
+}
 /* USER CODE END 4 */
 
 /**
