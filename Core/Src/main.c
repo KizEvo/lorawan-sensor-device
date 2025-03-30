@@ -29,6 +29,8 @@
 #include "aes.h"
 #include "loramac.h"
 #include "secrets.h"
+#include <string.h>
+#include <time.h>
 //#include "secrets.h"
 //#include "cc20_p1305.h"
 /* USER CODE END Includes */
@@ -62,6 +64,7 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+#define TEST_PKT 1
 
 #define TIME_SLEEP_MAX 1
 #define RX_BUFFER_SIZE 255
@@ -79,7 +82,13 @@ static uint32_t dev_addr = DEV_ADDR1;
 static uint8_t nwkskey[16] = {NWKSKEY1};
 static uint8_t appskey[16] = {APPSKEY1};
 
+static uint32_t start, end;
+
 static struct loramac_phys_payload *loramac_payload;
+#ifdef TEST_PKT
+static struct loramac_phys_payload _loramac_payload_test = {0};
+static struct loramac_phys_payload *loramac_payload_test;
+#endif
 
 static volatile uint8_t lorawan_rx_buffer[RX_BUFFER_SIZE];
 static volatile uint8_t lorawan_rx_buf_size;
@@ -114,6 +123,23 @@ void TIM2_Disable_IT(void)
 	TIM2->CR1 &= ~(TIM_CR1_CEN);
 }
 
+void TIM4_Start(void)
+{
+	TIM4->CNT = 0; /*Reset counter*/
+	TIM4->CR1 |= TIM_CR1_ARPE; /*Enable autoreload on update event*/
+	TIM4->ARR = 10;
+	TIM4->PSC = 6;
+	TIM4->SR &= ~(TIM_SR_UIF); /*Clear update event flag*/
+	TIM4->CR1 |= TIM_CR1_CEN; /*Enable counter*/
+}
+
+void TIM4_Disable(void)
+{
+	TIM4->SR &= ~(TIM_SR_UIF);
+	TIM4->CR1 &= ~(TIM_CR1_CEN); /*Disable counter*/
+	TIM4->CNT = 0; /*Reset counter*/
+}
+
 void delay_us(uint32_t time_us)
 {
 	if (time_us > 10) {
@@ -145,6 +171,7 @@ void delay_us(uint32_t time_us)
 	}
 	
 	TIM4->CR1 &= ~(TIM_CR1_CEN); /*Disable counter*/
+	TIM4->CNT = 0; /*Reset counter*/
 }
 
 void led_flashing(GPIO_TypeDef *port, uint16_t pin, uint8_t time)
@@ -258,6 +285,7 @@ int main(void)
 	myDHT11.data_port = DHT11_GPIO_Port;
 	myDHT11.data_pin = DHT11_Pin;
 
+
 	HAL_Delay(3000);
 
 	if (LoRa_init(&myLoRa) == LORA_OK) {
@@ -270,6 +298,8 @@ int main(void)
 	if (dht11_init(&myDHT11) == 0) {
 		led_flashing(LED_GPIO_Port, LED_Pin, 5);
 	}
+
+	led_flashing(LED_GPIO_Port, LED_Pin, 5);
 	
 	uint8_t time_sleep = 5;
 	
@@ -277,6 +307,13 @@ int main(void)
 	loramac_payload = loramac_init();
 	loramac_fill_mac_payload(loramac_payload, 1, NULL);
 	loramac_fill_phys_payload(loramac_payload, LORAMAC_PHYS_PAYLOAD_MHDR_UNCONFIRM_DATA_UP, 0);
+
+#ifdef TEST_PKT
+	loramac_payload_test = &_loramac_payload_test;
+	loramac_fill_mac_payload(loramac_payload_test, 100, NULL);
+	loramac_fill_phys_payload(loramac_payload_test, LORAMAC_PHYS_PAYLOAD_MHDR_UNCONFIRM_DATA_UP, 0);
+#endif
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -300,22 +337,52 @@ int main(void)
 				if (prog_fsm != LORA_RX_PKT_RDY && dht11_read(&myDHT11) == 0) {
 					prog_fsm = LORA_TX;
 					led_flashing(LED_GPIO_Port, LED_Pin, 2);
-					
+#ifdef TEST_PKT
+					TIM4_Start(); // Start time calculation
+					start = TIM4->CNT;
+#endif
 					loramac_fill_fhdr(loramac_payload, dev_addr, 0, loramac_f_cnt, NULL);
 					loramac_fill_mac_payload(loramac_payload, 1, myDHT11.data);
-					loramac_f_cnt += 1;
 					uint32_t loramac_mic = 0;
 					loramac_frm_payload_encryption(loramac_payload, 5, appskey);
 					loramac_calculate_mic(loramac_payload, 5, nwkskey, 1, &loramac_mic); // 5 FRM_PAYLOAD + 1 MHDR + 7 FHDR + 1 FPORT
 					loramac_fill_phys_payload(loramac_payload, LORAMAC_PHYS_PAYLOAD_MHDR_UNCONFIRM_DATA_UP, loramac_mic);
-
+#ifdef TEST_PKT
+					end = TIM4->CNT;
+					TIM4_Disable(); // End time
+					uint32_t clk_elapsed = end - start;
+#endif
 					uint8_t lora_package[18] = {0}; // 5 FRM_PAYLOAD + 13 LORAWAN protocol excepts FOPTS
 					loramac_serialize_data(loramac_payload, lora_package, 5);
+#ifdef TEST_PKT
+					uint8_t frm_payload_data[5] = {0};
+					if (end >= start) {
+						memcpy(frm_payload_data, (uint8_t *)&clk_elapsed, 4);
+						loramac_fill_fhdr(loramac_payload_test, dev_addr, 0, loramac_f_cnt, NULL);
+						loramac_fill_mac_payload(loramac_payload_test, 100, frm_payload_data);
+						uint32_t mic = 0;
+						loramac_frm_payload_encryption(loramac_payload_test, 5, appskey);
+						loramac_calculate_mic(loramac_payload_test, 5, nwkskey, 1, &mic);
+						loramac_fill_phys_payload(loramac_payload_test, LORAMAC_PHYS_PAYLOAD_MHDR_UNCONFIRM_DATA_UP, mic);
+
+						uint8_t lora_test_package[18] = {0}; // 5 FRM_PAYLOAD + 13 LORAWAN protocol excepts FOPTS
+						loramac_serialize_data(loramac_payload_test, lora_test_package, 5);
+						if (LoRa_transmit(&myLoRa, lora_test_package, 18, 1000)) {
+							led_flashing(LED_GPIO_Port, LED_Pin, 5);
+							loramac_f_cnt += 1;
+					  }
+					} else {
+						led_flashing(LED_GPIO_Port, LED_Pin, 2);
+					}
+#endif
 					LoRa_gotoMode(&myLoRa, STNBY_MODE);
 					LoRa_setFrequency(&myLoRa, 920400000);
+#ifndef TEST_PKT
 					if (LoRa_transmit(&myLoRa, lora_package, 18, 1000)) {
 						led_flashing(LED_GPIO_Port, LED_Pin, 5);
+						loramac_f_cnt += 1;
 					}
+#endif
 				} else {
 					HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
 				}
