@@ -125,53 +125,31 @@ void TIM2_Disable_IT(void)
 
 void TIM4_Start(void)
 {
-	TIM4->CNT = 0; /*Reset counter*/
-	TIM4->CR1 |= TIM_CR1_ARPE; /*Enable autoreload on update event*/
-	TIM4->ARR = 10;
-	TIM4->PSC = 6;
-	TIM4->SR &= ~(TIM_SR_UIF); /*Clear update event flag*/
-	TIM4->CR1 |= TIM_CR1_CEN; /*Enable counter*/
+	HAL_TIM_Base_Start(&htim4);
 }
 
 void TIM4_Disable(void)
 {
-	TIM4->SR &= ~(TIM_SR_UIF);
-	TIM4->CR1 &= ~(TIM_CR1_CEN); /*Disable counter*/
-	TIM4->CNT = 0; /*Reset counter*/
+	HAL_TIM_Base_Stop(&htim4);
+	// Optionally disable the TIM4 clock entirely
+	__HAL_RCC_TIM4_CLK_DISABLE();
 }
 
-void delay_us(uint32_t time_us)
-{
-	if (time_us > 10) {
-		uint32_t offset_in_calc = time_us - 10;
-		uint32_t prev_val = offset_in_calc;
-		for (offset_in_calc = time_us - 10; offset_in_calc + 4 <= time_us;)
-		{
-			prev_val = offset_in_calc;
-			offset_in_calc += 4;
-		}
-		offset_in_calc = prev_val;
-		time_us = offset_in_calc;
-	}
-	
-	TIM4->CNT = 0; /*Reset counter*/
-	TIM4->CR1 |= TIM_CR1_ARPE; /*Enable autoreload on update event*/
-	TIM4->ARR = 10;
-	TIM4->PSC = 6;
-	TIM4->SR &= ~(TIM_SR_UIF); /*Clear update event flag*/
-	TIM4->CR1 |= TIM_CR1_CEN; /*Enable counter*/
-	
-	/*Loop until timeInMs = 0*/
-	while(time_us > 0)
-	{
-		while(!((TIM4->SR & TIM_SR_UIF) != 0));/*Wait for counter to overflow*/
-		
-		time_us = time_us - 1;
-		TIM4->SR &= ~(TIM_SR_UIF);
-	}
-	
-	TIM4->CR1 &= ~(TIM_CR1_CEN); /*Disable counter*/
-	TIM4->CNT = 0; /*Reset counter*/
+void delay_us(uint16_t us) {
+    // Ensure TIM4 clock is enabled
+    __HAL_RCC_TIM4_CLK_ENABLE();
+    TIM4_Start();
+
+    // Reset the counter
+    __HAL_TIM_SET_COUNTER(&htim4, 0);
+
+    // Wait until the counter reaches the desired value
+    while (__HAL_TIM_GET_COUNTER(&htim4) < us) {
+        // Do nothing, just wait
+    }
+
+    // Stop the timer to save power
+    TIM4_Disable();
 }
 
 void led_flashing(GPIO_TypeDef *port, uint16_t pin, uint8_t time)
@@ -334,30 +312,41 @@ int main(void)
 				}
 			}
 			if (LoRa_stat) {
+				memset(myDHT11.data, 0, sizeof(myDHT11.data));
 				if (prog_fsm != LORA_RX_PKT_RDY && dht11_read(&myDHT11) == 0) {
+					uint32_t data_size = sizeof(myDHT11.data);
 					prog_fsm = LORA_TX;
 					led_flashing(LED_GPIO_Port, LED_Pin, 2);
 #ifdef TEST_PKT
-					TIM4_Start(); // Start time calculation
-					start = TIM4->CNT;
+					// Ensure TIM4 clock is enabled
+					__HAL_RCC_TIM4_CLK_ENABLE();
+					TIM4_Start();
+
+					// Reset the counter
+					__HAL_TIM_SET_COUNTER(&htim4, 0);
+					start = __HAL_TIM_GET_COUNTER(&htim4);
 #endif
 					loramac_fill_fhdr(loramac_payload, dev_addr, 0, loramac_f_cnt, NULL);
 					loramac_fill_mac_payload(loramac_payload, 1, myDHT11.data);
 					uint32_t loramac_mic = 0;
-					loramac_frm_payload_encryption(loramac_payload, 5, appskey);
-					loramac_calculate_mic(loramac_payload, 5, nwkskey, 1, &loramac_mic); // 5 FRM_PAYLOAD + 1 MHDR + 7 FHDR + 1 FPORT
+					loramac_frm_payload_encryption(loramac_payload, data_size, appskey);
+					loramac_calculate_mic(loramac_payload, data_size, nwkskey, 1, &loramac_mic); // 5 FRM_PAYLOAD + 1 MHDR + 7 FHDR + 1 FPORT
 					loramac_fill_phys_payload(loramac_payload, LORAMAC_PHYS_PAYLOAD_MHDR_UNCONFIRM_DATA_UP, loramac_mic);
 #ifdef TEST_PKT
-					end = TIM4->CNT;
+					end = __HAL_TIM_GET_COUNTER(&htim4);
 					TIM4_Disable(); // End time
 					uint32_t clk_elapsed = end - start;
 #endif
-					uint8_t lora_package[18] = {0}; // 5 FRM_PAYLOAD + 13 LORAWAN protocol excepts FOPTS
-					loramac_serialize_data(loramac_payload, lora_package, 5);
+					uint8_t lora_package[13 + data_size]; // 13 LORAWAN protocol excepts FOPTS + FRM_PAYLOAD
+					memset(lora_package, 0, 13 + data_size);
+					loramac_serialize_data(loramac_payload, lora_package, data_size);
+					LoRa_gotoMode(&myLoRa, STNBY_MODE);
+					LoRa_setFrequency(&myLoRa, 920400000);
 #ifdef TEST_PKT
 					uint8_t frm_payload_data[5] = {0};
 					if (end >= start) {
-						memcpy(frm_payload_data, (uint8_t *)&clk_elapsed, 4);
+						memcpy(frm_payload_data, (uint8_t *)&clk_elapsed, 3);
+						frm_payload_data[3] = data_size;
 						loramac_fill_fhdr(loramac_payload_test, dev_addr, 0, loramac_f_cnt, NULL);
 						loramac_fill_mac_payload(loramac_payload_test, 100, frm_payload_data);
 						uint32_t mic = 0;
@@ -365,7 +354,7 @@ int main(void)
 						loramac_calculate_mic(loramac_payload_test, 5, nwkskey, 1, &mic);
 						loramac_fill_phys_payload(loramac_payload_test, LORAMAC_PHYS_PAYLOAD_MHDR_UNCONFIRM_DATA_UP, mic);
 
-						uint8_t lora_test_package[18] = {0}; // 5 FRM_PAYLOAD + 13 LORAWAN protocol excepts FOPTS
+						uint8_t lora_test_package[18] = {0}; // 13 LORAWAN protocol excepts FOPTS + 5 bytes of FRM_PAYLOAD : encryption time
 						loramac_serialize_data(loramac_payload_test, lora_test_package, 5);
 						if (LoRa_transmit(&myLoRa, lora_test_package, 18, 1000)) {
 							led_flashing(LED_GPIO_Port, LED_Pin, 5);
@@ -374,11 +363,8 @@ int main(void)
 					} else {
 						led_flashing(LED_GPIO_Port, LED_Pin, 2);
 					}
-#endif
-					LoRa_gotoMode(&myLoRa, STNBY_MODE);
-					LoRa_setFrequency(&myLoRa, 920400000);
-#ifndef TEST_PKT
-					if (LoRa_transmit(&myLoRa, lora_package, 18, 1000)) {
+#else
+					if (LoRa_transmit(&myLoRa, lora_package, 13 + data_size, 1000)) {
 						led_flashing(LED_GPIO_Port, LED_Pin, 5);
 						loramac_f_cnt += 1;
 					}

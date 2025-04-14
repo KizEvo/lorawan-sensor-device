@@ -42,10 +42,19 @@ int32_t loramac_fill_phys_payload(struct loramac_phys_payload *payload, uint8_t 
 	return 0;
 }
 
-static int32_t loramac_aes_byte_array_xor(uint8_t *byte_a, uint8_t *byte_b, uint8_t *out, uint32_t size)
+static int32_t loramac_aes_byte_array_xor(uint8_t *byte_a, uint8_t b[16][16], uint8_t *out, uint32_t frm_payload_size)
 {
-	for (int i = 0, j = size - 1; i < size; i++, j--) {
-		out[i] = byte_a[i] ^ byte_b[j];
+	int i = 0;
+	uint8_t total_block = (uint8_t)(frm_payload_size / 16) + (frm_payload_size % 16 ? 1 : 0);
+	for (uint8_t block = 0; block < total_block; block++) {
+		uint8_t *byte_b = b[block];
+		for (int j = 15; j >= 0; j--) {
+			out[i] = byte_a[i] ^ byte_b[j];
+			i++;
+			if (i >= frm_payload_size) {
+				break;
+			}
+		}
 	}
 	return 0;
 }
@@ -77,7 +86,7 @@ int32_t loramac_calculate_mic(struct loramac_phys_payload *payload, uint8_t frm_
 	memcpy(&in[17], (uint8_t *)&payload->mac_payload.f_hdr, 7);
 	in[17 + 7] = payload->mac_payload.f_port;
 	// Little endian payload
-	for (uint8_t i = 17 + 7 + 1, j = frm_payload_size - 1; i < frm_payload_size + 17 + 7 + 1; i++, j--) {
+	for (uint16_t i = 17 + 7 + 1, j = frm_payload_size - 1; i < frm_payload_size + 17 + 7 + 1; i++, j--) {
 		in[i] = payload->mac_payload.frm_payload[j]; // FRM_PAYLOAD starts from byte offset 9
 	}
 	// ASCON MAC
@@ -103,23 +112,23 @@ int32_t loramac_frm_payload_encryption(struct loramac_phys_payload *payload, uin
 	uint8_t *Ai_dev_addr;
 	uint8_t *Ai_f_cnt;
 
-	uint8_t Ai[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-	uint8_t S[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-
-	Ai[0] = 0x01;
-	Ai[5] = payload->m_hdr & 0x20 ? DOWNLINK : UPLINK;
+	uint8_t Ai[16][16] = {0};
+	uint8_t S[16][16] = {0};
 
 	Ai_dev_addr = (uint8_t *)&payload->mac_payload.f_hdr.dev_addr; // transform to little endian
-	memcpy(&Ai[6], Ai_dev_addr, 4);
 	Ai_f_cnt = (uint8_t *)&payload->mac_payload.f_hdr.f_cnt;
-	memcpy(&Ai[10], Ai_f_cnt, 2);
 
-	aes_context ctx = {0};
-	aes_set_key(key, 16, &ctx);
+	for (uint8_t i = 0; i < (uint8_t)(frm_payload_size / 16) + (frm_payload_size % 16 ? 1 : 0); i++) {
+		Ai[i][0] = 0x01;
+		Ai[i][5] = payload->m_hdr & 0x20 ? DOWNLINK : UPLINK;
 
-	for (uint8_t i = 1; i <= (uint8_t)(frm_payload_size / 16) + (frm_payload_size % 16 ? 1 : 0); i++) {
-		Ai[15] = i;
-		aes_encrypt(Ai, S, &ctx);
+		memcpy(&Ai[i][6], Ai_dev_addr, 4);
+		memcpy(&Ai[i][10], Ai_f_cnt, 2);
+
+		aes_context ctx = {0};
+		aes_set_key(key, 16, &ctx);
+		Ai[i][15] = i + 1;
+		aes_encrypt(Ai[i], S[i], &ctx);
 	}
 
 	loramac_aes_byte_array_xor(payload->mac_payload.frm_payload, S, payload->mac_payload.frm_payload, frm_payload_size);
@@ -133,7 +142,7 @@ int32_t loramac_serialize_data(struct loramac_phys_payload *payload, uint8_t *ou
 	memcpy(out_data, (uint8_t *)payload, 8); // MHDR -> FCNT
 	out_data[8] = payload->mac_payload.f_port; // FPORT
 	// Little endian payload
-	for (uint8_t i = 9, j = frm_payload_size - 1; i < frm_payload_size + 9; i++, j--) {
+	for (uint16_t i = 9, j = frm_payload_size - 1; i < frm_payload_size + 9; i++, j--) {
 		out_data[i] = payload->mac_payload.frm_payload[j]; // FRM_PAYLOAD starts from byte offset 9
 	}
 	memcpy(&out_data[9 + frm_payload_size], (uint8_t *)&payload->mic, 4); // MIC
