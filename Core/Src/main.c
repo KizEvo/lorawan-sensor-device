@@ -64,7 +64,7 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-#define TEST_PKT 1
+//#define TEST_PKT 1
 
 #define TIME_SLEEP_MAX 1
 #define RX_BUFFER_SIZE 255
