@@ -26,7 +26,6 @@
 /* USER CODE BEGIN Includes */
 #include "LoRa.h"
 #include "dht11.h"
-#include "aes.h"
 #include "loramac.h"
 #include "secrets.h"
 #include <string.h>
@@ -64,7 +63,7 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-//#define TEST_PKT 1
+#define TEST_PKT 1
 
 #define TIME_SLEEP_MAX 1
 #define RX_BUFFER_SIZE 255
@@ -198,7 +197,7 @@ int32_t decrypt_lorawan_asconmac(uint8_t *lora_raw_data, uint8_t size, struct lo
 	uint32_t mic = 0;
 	uint32_t decoded_mic = 0;
 	/* Calculate MIC */
-	loramac_calculate_mic(payload, frm_payload_size, nwkskey, 1, &mic);
+	loramac_calculate_mic(payload, frm_payload_size, nwkskey, 0, &mic);
 	decoded_mic = LE_BYTES_TO_UINT32(&lora_raw_data[LRMAC_BYTE_OFFSET_FRMPAYLOAD + frm_payload_size]);
 	if (mic != decoded_mic) {
 		/* MIC does not match */ 
@@ -330,7 +329,7 @@ int main(void)
 					loramac_fill_mac_payload(loramac_payload, 1, myDHT11.data);
 					uint32_t loramac_mic = 0;
 					loramac_frm_payload_encryption(loramac_payload, data_size, appskey);
-					loramac_calculate_mic(loramac_payload, data_size, nwkskey, 1, &loramac_mic); // 5 FRM_PAYLOAD + 1 MHDR + 7 FHDR + 1 FPORT
+					loramac_calculate_mic(loramac_payload, data_size, nwkskey, 0, &loramac_mic); // 5 FRM_PAYLOAD + 1 MHDR + 7 FHDR + 1 FPORT
 					loramac_fill_phys_payload(loramac_payload, LORAMAC_PHYS_PAYLOAD_MHDR_UNCONFIRM_DATA_UP, loramac_mic);
 #ifdef TEST_PKT
 					end = __HAL_TIM_GET_COUNTER(&htim4);
@@ -351,7 +350,7 @@ int main(void)
 						loramac_fill_mac_payload(loramac_payload_test, 100, frm_payload_data);
 						uint32_t mic = 0;
 						loramac_frm_payload_encryption(loramac_payload_test, 5, appskey);
-						loramac_calculate_mic(loramac_payload_test, 5, nwkskey, 1, &mic);
+						loramac_calculate_mic(loramac_payload_test, 5, nwkskey, 0, &mic);
 						loramac_fill_phys_payload(loramac_payload_test, LORAMAC_PHYS_PAYLOAD_MHDR_UNCONFIRM_DATA_UP, mic);
 
 						uint8_t lora_test_package[18] = {0}; // 13 LORAWAN protocol excepts FOPTS + 5 bytes of FRM_PAYLOAD : encryption time

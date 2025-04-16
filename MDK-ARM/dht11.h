@@ -10,7 +10,7 @@ typedef struct dht11 {
 	/* these are set by dht11_read */
 	float temperature;
 	float humidity;
-	uint8_t data[5];
+	uint8_t data[242];
 } dht11;
 
 /**

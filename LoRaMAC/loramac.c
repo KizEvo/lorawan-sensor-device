@@ -5,7 +5,8 @@
 #include "crypto_auth.h"
 
 #include "loramac.h"
-#include "aes.h"
+#include "TI_aes_128.h"
+#include "aes-cbc-cmac.h"
 
 struct loramac_phys_payload *loramac_init(void)
 {
@@ -96,7 +97,7 @@ int32_t loramac_calculate_mic(struct loramac_phys_payload *payload, uint8_t frm_
 			return -1;
 		}
 	} else {
-		return -2;
+		AES_CMAC(key, in, inlen, out);
 	}
 	*mic = out[0];
 	*mic |= out[1] << 8;
@@ -113,7 +114,7 @@ int32_t loramac_frm_payload_encryption(struct loramac_phys_payload *payload, uin
 	uint8_t *Ai_f_cnt;
 
 	uint8_t Ai[16][16] = {0};
-	uint8_t S[16][16] = {0};
+	// uint8_t S[16][16] = {0};
 
 	Ai_dev_addr = (uint8_t *)&payload->mac_payload.f_hdr.dev_addr; // transform to little endian
 	Ai_f_cnt = (uint8_t *)&payload->mac_payload.f_hdr.f_cnt;
@@ -125,13 +126,14 @@ int32_t loramac_frm_payload_encryption(struct loramac_phys_payload *payload, uin
 		memcpy(&Ai[i][6], Ai_dev_addr, 4);
 		memcpy(&Ai[i][10], Ai_f_cnt, 2);
 
-		aes_context ctx = {0};
-		aes_set_key(key, 16, &ctx);
 		Ai[i][15] = i + 1;
-		aes_encrypt(Ai[i], S[i], &ctx);
+		uint8_t key_copy[16];
+		memcpy(key_copy, key, 16);
+		aes_enc_dec(Ai[i], key_copy, 0);
 	}
 
-	loramac_aes_byte_array_xor(payload->mac_payload.frm_payload, S, payload->mac_payload.frm_payload, frm_payload_size);
+	// Since aes_enc_dec return ciphertext through Ai input then we also use this as "S" block
+	loramac_aes_byte_array_xor(payload->mac_payload.frm_payload, Ai, payload->mac_payload.frm_payload, frm_payload_size);
 
 	return 0;
 }

@@ -341,7 +341,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F103xB</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include;../LoRa;../MDK-ARM;../aes;../LoRaMAC;..\asconmac\armv7m;../asconmac/interface;../secrets</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include;../LoRa;../MDK-ARM;..\ti-aes128-aescmac;../LoRaMAC;..\asconmac\armv7m;../asconmac/interface;../secrets</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -577,14 +577,19 @@
               <FilePath>.\dht11.c</FilePath>
             </File>
             <File>
-              <FileName>aes.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\aes\aes.c</FilePath>
-            </File>
-            <File>
               <FileName>loramac.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\LoRaMAC\loramac.c</FilePath>
+            </File>
+            <File>
+              <FileName>aes-cbc-cmac.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\ti-aes128-aescmac\aes-cbc-cmac.c</FilePath>
+            </File>
+            <File>
+              <FileName>TI_aes_128.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\ti-aes128-aescmac\TI_aes_128.c</FilePath>
             </File>
           </Files>
         </Group>
