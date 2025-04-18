@@ -26,7 +26,6 @@
 /* USER CODE BEGIN Includes */
 #include "LoRa.h"
 #include "dht11.h"
-#include "aes.h"
 #include "loramac.h"
 #include "secrets.h"
 #include <string.h>
@@ -79,20 +78,28 @@ struct program_state {
 	uint8_t joined;
 };
 
-enum PROG_FSM {INIT = 0, MCU_SLEEP = 1, LORA_TX = 2, LORA_RX = 3, LORA_GPIO_INT = 4, LORA_TIMER_INT = 5, LORA_RX_PKT_RDY = 6};
+enum PROG_FSM {INIT, MCU_SLEEP, LORA_TX, LORA_TX_JOIN_REQ_STARTED, LORA_RX, LORA_GPIO_INT, LORA_TIMER_INT, LORA_RX_PKT_RDY};
 
 struct program_state prog = {0};
 
 static LoRa myLoRa;
 static uint16_t LoRa_stat = 0;
 
+// ABP
 static uint32_t dev_addr = DEV_ADDR1;
 static uint8_t nwkskey[16] = {NWKSKEY1};
 static uint8_t appskey[16] = {APPSKEY1};
 
+// OTAA
+static uint8_t appeui[8] = {APP_EUI};
+static uint8_t deveui[8] = {DEV_EUI};
+static uint8_t appkey[16] = {APP_KEY};
+static uint8_t devnonce[2] = {0};
+
 static uint32_t start, end;
 
 static struct loramac_phys_payload *loramac_payload;
+static struct loramac_phys_payload_join_request *loramac_jr;
 #ifdef TEST_PKT
 static struct loramac_phys_payload _loramac_payload_test = {0};
 static struct loramac_phys_payload *loramac_payload_test;
@@ -265,6 +272,7 @@ int main(void)
 
   /* USER CODE BEGIN 1 */
 	prog.fsm = INIT;
+	prog.joined = 0;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -323,6 +331,9 @@ int main(void)
 	
 	loramac_payload = loramac_init();
 	uint16_t loramac_f_cnt = 0;
+	if (loramac_pack_join_request(&loramac_jr, appeui, deveui, devnonce, appkey) == 0) {
+		led_flashing(LED_GPIO_Port, LED_Pin, 3);
+	}
 
 #ifdef TEST_PKT
 	loramac_payload_test = &_loramac_payload_test;
@@ -349,9 +360,18 @@ int main(void)
 					}
 				}
 			}
+			// If LoRa is OK then proceed to next step
 			if (LoRa_stat) {
-				memset(myDHT11.data, 0, sizeof(myDHT11.data));
-				if (prog.fsm != LORA_RX_PKT_RDY) {
+				// Perform join-request at startup
+				if (!prog.joined) {
+					prog.fsm = LORA_TX_JOIN_REQ_STARTED;
+					// Transmit join-request message
+					if (LoRa_transmit(&myLoRa, (uint8_t *)loramac_jr, sizeof(struct loramac_phys_payload_join_request), 1000)){
+						led_flashing(LED_GPIO_Port, LED_Pin, 2);
+					}
+					// Now wait for downlink join-accept message
+				} else if (prog.joined && prog.fsm != LORA_RX_PKT_RDY) {
+					memset(myDHT11.data, 0, sizeof(myDHT11.data));
 					// Retry reading from DHT sensor
 					uint32_t retry, data_size;
 					for (retry = 0; retry < 2; retry++) {
@@ -405,7 +425,7 @@ int main(void)
 					}
 #else
 					// Transmit using LoRa transceiver module
-					if (lorawan_transmit(&myLoRa, loramac_payload, data_size, 920400000) == 0) {
+					if (lorawan_transmit(&myLoRa, loramac_payload, data_size, 921200000) == 0) {
 						loramac_f_cnt += 1;
 						led_flashing(LED_GPIO_Port, LED_Pin, 5);
 					}

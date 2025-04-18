@@ -149,3 +149,41 @@ int32_t loramac_serialize_data(struct loramac_phys_payload *payload, uint8_t *ou
 	
 	return 0;
 }
+
+int32_t loramac_pack_join_request(struct loramac_phys_payload_join_request **jr_frame, uint8_t *app_eui, uint8_t *dev_eui, uint8_t *dev_nonce, uint8_t *appkey)
+{
+	static struct loramac_phys_payload_join_request frame = {0};
+	uint8_t out[16] = {0};
+	uint8_t i;
+
+	frame.m_hdr = 0;
+
+	for (i = 0; i < 8; i++){
+		frame.app_eui[i] = app_eui[7 - i];
+	}
+	for (i = 0; i < 8; i++){
+		frame.dev_eui[i] = dev_eui[7 - i];
+	}
+	for (i = 0; i < 2; i++){
+		frame.dev_nonce[i] = dev_nonce[1 - i];
+	}
+
+	int rc = crypto_auth(out, &frame.m_hdr, sizeof(struct loramac_phys_payload_join_request) - sizeof(frame.mic), appkey);
+	if (rc != 0) {
+		return -2;
+	}
+	for (i = 0; i < 4; i++){
+		frame.mic[i] = out[3 - i];
+	}
+
+	*jr_frame = &frame;
+
+	return 0;
+}
+
+int32_t loramac_update_join_request_nonce(struct loramac_phys_payload_join_request *jr_frame, uint8_t *new_dev_nonce)
+{
+	jr_frame->dev_nonce[0] = new_dev_nonce[1];
+	jr_frame->dev_nonce[1] = new_dev_nonce[0];
+	return 0;
+}

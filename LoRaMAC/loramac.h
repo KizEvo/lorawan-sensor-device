@@ -31,6 +31,14 @@ struct loramac_phys_payload {
 	uint32_t mic;
 } __attribute__ ((packed));
 
+struct loramac_phys_payload_join_request {
+	uint8_t m_hdr;
+	uint8_t app_eui[8];
+	uint8_t dev_eui[8];
+	uint8_t dev_nonce[2];
+	uint8_t mic[4];
+};
+
 struct loramac_phys_payload *loramac_init(void);
 
 int32_t loramac_fill_fhdr(struct loramac_phys_payload *payload, uint32_t dev_addr, uint8_t f_ctrl, uint16_t f_cnt, uint8_t *f_opts);
@@ -50,5 +58,12 @@ int32_t loramac_calculate_mic(struct loramac_phys_payload *payload, uint8_t frm_
 int32_t loramac_frm_payload_encryption(struct loramac_phys_payload *payload, uint8_t frm_payload_size, uint8_t *key);
 
 int32_t loramac_serialize_data(struct loramac_phys_payload *payload, uint8_t *out_data, uint8_t frm_payload_size);
+
+// join_request_le_msg - little endian format
+int32_t loramac_pack_join_request(struct loramac_phys_payload_join_request **jr_frame, uint8_t *app_eui, uint8_t *dev_eui, uint8_t *dev_nonce, uint8_t *appkey);
+
+// join_request_le_msg - little endian format
+// Should be used after loramac_pack_join_request
+int32_t loramac_update_join_request_nonce(struct loramac_phys_payload_join_request *jr_frame, uint8_t *new_dev_nonce);
 
 #endif /* LORAMAC_H */
