@@ -5,6 +5,7 @@
 
 #define LORAMAC_PHYS_PAYLOAD_MHDR_UNCONFIRM_DATA_UP 0x40
 #define LORAMAC_PHYS_PAYLOAD_MHDR_UNCONFIRM_DATA_DOWN 0x60
+#define LORAMAC_PHYS_PAYLOAD_JOIN_ACCEPT 0x20
 
 enum loramac_data_dir {UPLINK, DOWNLINK};
 enum loramac_byte_offset {LRMAC_BYTE_OFFSET_MHDR, LRMAC_BYTE_OFFSET_DEVADDR, LRMAC_BYTE_OFFSET_FCTRL = 5, LRMAC_BYTE_OFFSET_FCNT, LRMAC_BYTE_OFFSET_FPORT = 8, LRMAC_BYTE_OFFSET_FRMPAYLOAD};
@@ -39,6 +40,25 @@ struct loramac_phys_payload_join_request {
 	uint8_t mic[4];
 };
 
+struct loramac_phys_payload_join_accept {
+	uint8_t m_hdr;
+	uint8_t app_nonce[3];
+	uint8_t net_id[3];
+	uint8_t dev_addr[4];
+	uint8_t dl_settings;
+	uint8_t rx_delay;
+	// CFList unused. Device freq configuration
+	uint8_t mic[4];
+};
+
+struct join_accept_xskey_input {
+	uint8_t byte1;
+	uint8_t app_nonce[3];
+	uint8_t net_id[3];
+	uint8_t dev_nonce[2];
+	uint8_t pad[7];
+};
+
 struct loramac_phys_payload *loramac_init(void);
 
 int32_t loramac_fill_fhdr(struct loramac_phys_payload *payload, uint32_t dev_addr, uint8_t f_ctrl, uint16_t f_cnt, uint8_t *f_opts);
@@ -65,5 +85,7 @@ int32_t loramac_pack_join_request(struct loramac_phys_payload_join_request **jr_
 // join_request_le_msg - little endian format
 // Should be used after loramac_pack_join_request
 int32_t loramac_update_join_request_nonce(struct loramac_phys_payload_join_request *jr_frame, uint8_t *new_dev_nonce);
+
+int32_t loramac_pack_join_accept(struct loramac_phys_payload_join_accept **ja_frame, uint8_t *app_nonce, uint8_t *net_id, uint8_t *dev_addr, uint8_t *dl_settings, uint8_t *rx_delay, uint8_t *appkey);
 
 #endif /* LORAMAC_H */

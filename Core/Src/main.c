@@ -26,8 +26,10 @@
 /* USER CODE BEGIN Includes */
 #include "LoRa.h"
 #include "dht11.h"
+#include "aes.h"
 #include "loramac.h"
 #include "secrets.h"
+#include "crypto_auth.h"
 #include <string.h>
 #include <time.h>
 //#include "secrets.h"
@@ -86,9 +88,9 @@ static LoRa myLoRa;
 static uint16_t LoRa_stat = 0;
 
 // ABP
-static uint32_t dev_addr = DEV_ADDR1;
-static uint8_t nwkskey[16] = {NWKSKEY1};
-static uint8_t appskey[16] = {APPSKEY1};
+static uint32_t dev_addr = 0; // DEV_ADDR1
+static uint8_t nwkskey[16] = {0}; // NWKSKEY1
+static uint8_t appskey[16] = {0}; // APPSKEY1
 
 // OTAA
 static uint8_t appeui[8] = {APP_EUI};
@@ -199,6 +201,49 @@ int32_t lorawan_transmit(LoRa *lora, struct loramac_phys_payload *loramac_payloa
 		return 0;
 	}
 	return -1;
+}
+
+static struct loramac_phys_payload_join_accept ja_encrypt_out = {0};
+static uint8_t auth_tag[16] = {0};
+
+int32_t process_lorawan_join_accept(uint8_t *nwkskey_out, uint8_t *appskey_out, uint32_t *dev_addr_out, uint8_t *in)
+{
+	struct loramac_phys_payload_join_accept ja_encrypt_out = {0};
+	struct join_accept_xskey_input ja_keys_in = {0};
+	
+	aes_context ctx = {0};
+	uint8_t i;
+
+	aes_set_key(appkey, 16, &ctx);
+	aes_encrypt(&in[1], (uint8_t *)ja_encrypt_out.app_nonce, &ctx);
+	ja_encrypt_out.m_hdr = LORAMAC_PHYS_PAYLOAD_JOIN_ACCEPT;
+
+	// check MIC
+	crypto_auth(auth_tag, &ja_encrypt_out.m_hdr, sizeof(struct loramac_phys_payload_join_accept) - sizeof(ja_encrypt_out.mic), appkey);
+	for (i = 0; i < sizeof(ja_encrypt_out.mic); i++){
+		if (auth_tag[i] != ja_encrypt_out.mic[sizeof(ja_encrypt_out.mic) - 1 - i]) {
+			// MIC invalid
+			return -1;
+		}
+	}
+
+	// get nwkskey
+	ja_keys_in.byte1 = 0x01;
+	memcpy(ja_keys_in.app_nonce, ja_encrypt_out.app_nonce, 3);
+	memcpy(ja_keys_in.net_id, ja_encrypt_out.net_id, 3);
+	memcpy(ja_keys_in.dev_nonce, devnonce, 2);
+
+	aes_encrypt((uint8_t *)&ja_keys_in, nwkskey_out, &ctx);
+
+	// get appskey
+	ja_keys_in.byte1 = 0x02;
+
+	aes_encrypt((uint8_t *)&ja_keys_in, appskey_out, &ctx);
+
+	// get devaddr
+	*dev_addr_out = LE_BYTES_TO_UINT32(ja_encrypt_out.dev_addr);
+
+	return 0;
 }
 
 int32_t encrypt_lorawan(struct loramac_phys_payload *loramac_payload, uint8_t *data, uint8_t data_size, uint16_t loramac_f_cnt, uint8_t f_port, uint8_t f_ctrl)
@@ -349,14 +394,27 @@ int main(void)
   {
 		if (time_sleep >= TIME_SLEEP_MAX) {
 			time_sleep = 0;
+			// If LoRa received packet, process it
 			if (prog.fsm == LORA_RX_PKT_RDY) {
-				int32_t ret = decrypt_lorawan((uint8_t *)lorawan_rx_buffer, lorawan_rx_buf_size, (struct loramac_mac_payload *)(&lorawan_rx_phys.mac_payload));
-				if (!ret) {
-					led_flashing(LED_GPIO_Port, LED_Pin, 4);
-					// Toggle device, currently frm_payload is unused
-					if (lorawan_rx_buf_size - 13 == 3) {
-						LoRa_stat ^= 0x1;
-						HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
+				// Check join-accept
+				if (!prog.joined) {
+					uint8_t m_hdr = lorawan_rx_buffer[0];
+					if (m_hdr == LORAMAC_PHYS_PAYLOAD_JOIN_ACCEPT) {
+						// Encrypt the payload to get DevAddr (assigned by Network server), AppsKey and NwKsKey
+						if (process_lorawan_join_accept(nwkskey, appskey, &dev_addr, (uint8_t *)lorawan_rx_buffer) == 0) {
+							led_flashing(LED_GPIO_Port, LED_Pin, 2);
+							prog.joined = 1;
+						}
+					}
+				} else {
+					int32_t ret = decrypt_lorawan((uint8_t *)lorawan_rx_buffer, lorawan_rx_buf_size, (struct loramac_mac_payload *)(&lorawan_rx_phys.mac_payload));
+					if (!ret) {
+						led_flashing(LED_GPIO_Port, LED_Pin, 2);
+						// Toggle device, currently frm_payload is unused
+						if (lorawan_rx_buf_size - 13 == 3) {
+							LoRa_stat ^= 0x1;
+							HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
+						}
 					}
 				}
 			}
@@ -377,7 +435,7 @@ int main(void)
 					for (retry = 0; retry < 2; retry++) {
 						if (dht11_read(&myDHT11) == 0) {
 							// Indicate read success
-							led_flashing(LED_GPIO_Port, LED_Pin, 2);
+							led_flashing(LED_GPIO_Port, LED_Pin, 1);
 							break;
 						}
 					}
@@ -425,7 +483,7 @@ int main(void)
 					}
 #else
 					// Transmit using LoRa transceiver module
-					if (lorawan_transmit(&myLoRa, loramac_payload, data_size, 921200000) == 0) {
+					if (lorawan_transmit(&myLoRa, loramac_payload, data_size, 920200000) == 0) {
 						loramac_f_cnt += 1;
 						led_flashing(LED_GPIO_Port, LED_Pin, 5);
 					}

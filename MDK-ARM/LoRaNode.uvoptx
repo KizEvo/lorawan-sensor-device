@@ -178,32 +178,27 @@
         <Ww>
           <count>5</count>
           <WinNumber>1</WinNumber>
-          <ItemText>loramac_payload_test</ItemText>
+          <ItemText>LoRa_stat</ItemText>
         </Ww>
         <Ww>
           <count>6</count>
           <WinNumber>1</WinNumber>
-          <ItemText>end</ItemText>
+          <ItemText>prog</ItemText>
         </Ww>
         <Ww>
           <count>7</count>
           <WinNumber>1</WinNumber>
-          <ItemText>start</ItemText>
+          <ItemText>loramac_jr</ItemText>
         </Ww>
         <Ww>
           <count>8</count>
           <WinNumber>1</WinNumber>
-          <ItemText>LoRa_stat</ItemText>
+          <ItemText>nwkskey</ItemText>
         </Ww>
         <Ww>
           <count>9</count>
           <WinNumber>1</WinNumber>
-          <ItemText>prog</ItemText>
-        </Ww>
-        <Ww>
-          <count>10</count>
-          <WinNumber>1</WinNumber>
-          <ItemText>loramac_jr</ItemText>
+          <ItemText>appskey</ItemText>
         </Ww>
       </WatchWindow1>
       <MemoryWindow1>

@@ -187,3 +187,35 @@ int32_t loramac_update_join_request_nonce(struct loramac_phys_payload_join_reque
 	jr_frame->dev_nonce[1] = new_dev_nonce[0];
 	return 0;
 }
+
+int32_t loramac_pack_join_accept(struct loramac_phys_payload_join_accept **ja_frame, uint8_t *app_nonce, uint8_t *net_id, uint8_t *dev_addr, uint8_t *dl_settings, uint8_t *rx_delay, uint8_t *appkey)
+{
+	static struct loramac_phys_payload_join_accept frame = {0};
+	uint8_t out[16] = {0};
+	uint8_t i;
+
+	frame.m_hdr = LORAMAC_PHYS_PAYLOAD_JOIN_ACCEPT;
+
+	for (i = 0; i < 3; i++){
+		frame.app_nonce[i] = app_nonce[2 - i];
+	}
+	for (i = 0; i < 3; i++){
+		frame.net_id[i] = net_id[2 - i];
+	}
+	for (i = 0; i < 4; i++){
+		frame.dev_addr[i] = dev_addr[3 - i];
+	}
+	frame.dl_settings = dl_settings[0];
+	frame.rx_delay = rx_delay[0];
+	int rc = crypto_auth(out, &frame.m_hdr, sizeof(struct loramac_phys_payload_join_accept) - sizeof(frame.mic), appkey);
+	if (rc != 0) {
+		return -2;
+	}
+	for (i = 0; i < 4; i++){
+		frame.mic[i] = out[3 - i];
+	}
+
+	*ja_frame = &frame;
+
+	return 0;
+}
