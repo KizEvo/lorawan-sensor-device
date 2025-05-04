@@ -341,7 +341,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F103xB</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include;../LoRa;../MDK-ARM;../aes;../LoRaMAC;..\asconmac\armv7m;../asconmac/interface;../secrets</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include;../LoRa;../MDK-ARM;../aes;../LoRaMAC;..\asconmac\armv7m;../asconmac/interface;../secrets;..\asconaead\armv7m;..\asconaead\interface</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -605,6 +605,16 @@
               <FileName>printstate.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\asconmac\armv7m\printstate.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>asconaead</GroupName>
+          <Files>
+            <File>
+              <FileName>aead.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\asconaead\armv7m\aead.c</FilePath>
             </File>
           </Files>
         </Group>
