@@ -29,7 +29,7 @@ struct loramac_mac_payload {
 struct loramac_phys_payload {
 	uint8_t m_hdr;
 	struct loramac_mac_payload mac_payload;
-	uint32_t mic;
+	uint8_t mic[16];
 } __attribute__ ((packed));
 
 struct loramac_phys_payload_join_request {
@@ -37,7 +37,7 @@ struct loramac_phys_payload_join_request {
 	uint8_t app_eui[8];
 	uint8_t dev_eui[8];
 	uint8_t dev_nonce[2];
-	uint8_t mic[4];
+	uint8_t mic[16];
 };
 
 struct loramac_phys_payload_join_accept {
@@ -48,7 +48,7 @@ struct loramac_phys_payload_join_accept {
 	uint8_t dl_settings;
 	uint8_t rx_delay;
 	// CFList unused. Device freq configuration
-	uint8_t mic[4];
+	uint8_t mic[16];
 };
 
 struct join_accept_xskey_input {
@@ -67,17 +67,11 @@ int32_t loramac_fill_fhdr(struct loramac_phys_payload *payload, uint32_t dev_add
 int32_t loramac_fill_mac_payload(struct loramac_phys_payload *payload, uint8_t f_port, uint8_t *frm_payload);
 
 // Expect the user to fill the MACPayload with the loramac_fill_mac_payload function
-int32_t loramac_fill_phys_payload(struct loramac_phys_payload *payload, uint8_t m_hdr, uint32_t mic);
+int32_t loramac_fill_phys_payload(struct loramac_phys_payload *payload, uint8_t m_hdr, uint8_t *mic);
 
-// Calculate MIC
-int32_t loramac_calculate_mic(struct loramac_phys_payload *payload, uint8_t frm_payload_size, uint8_t *key, uint8_t algo_option, uint32_t *mic);
+int32_t loramac_enc_aead(struct loramac_phys_payload *payload, uint8_t *out, uint8_t *out_size, uint8_t frm_payload_size, uint8_t *key);
 
-// Before calling this, fill all struct loramac_phys_payload and other data structures
-// Support <= 16 bytes FRM_PAYLOAD_SIZE
-// After using this function, the frm_payload field is encrypted
-int32_t loramac_frm_payload_encryption(struct loramac_phys_payload *payload, uint8_t frm_payload_size, uint8_t *key);
-
-int32_t loramac_serialize_data(struct loramac_phys_payload *payload, uint8_t *out_data, uint8_t frm_payload_size);
+int32_t loramac_dec_aead(struct loramac_phys_payload *out, uint8_t *out_frm_payload, uint8_t *out_frm_payload_size, uint8_t *loramac_in, uint8_t loramac_in_size, uint8_t *key);
 
 // join_request_le_msg - little endian format
 int32_t loramac_pack_join_request(struct loramac_phys_payload_join_request **jr_frame, uint8_t *app_eui, uint8_t *dev_eui, uint8_t *dev_nonce, uint8_t *appkey);
