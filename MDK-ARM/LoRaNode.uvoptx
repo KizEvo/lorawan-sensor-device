@@ -651,7 +651,7 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\asconmac\armv7m\permutations.c</PathWithFileName>
+      <PathWithFileName>..\asconmac\armv7m_small\permutations.c</PathWithFileName>
       <FilenameWithoutPath>permutations.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
@@ -663,7 +663,7 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\asconmac\armv7m\prf.c</PathWithFileName>
+      <PathWithFileName>..\asconmac\armv7m_small\prf.c</PathWithFileName>
       <FilenameWithoutPath>prf.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
@@ -683,7 +683,7 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\asconaead\armv7m\aead.c</PathWithFileName>
+      <PathWithFileName>..\asconaead\armv7m_small\aead.c</PathWithFileName>
       <FilenameWithoutPath>aead.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>

@@ -341,7 +341,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F103xB</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include;../LoRa;../MDK-ARM;../LoRaMAC;..\asconmac\armv7m;../asconmac/interface;../secrets;..\asconaead\armv7m;..\asconaead\interface</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include;../LoRa;../MDK-ARM;../LoRaMAC;..\asconmac\armv7m_small;../asconmac/interface;../secrets;..\asconaead\armv7m_small;..\asconaead\interface</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -589,12 +589,12 @@
             <File>
               <FileName>permutations.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\asconmac\armv7m\permutations.c</FilePath>
+              <FilePath>..\asconmac\armv7m_small\permutations.c</FilePath>
             </File>
             <File>
               <FileName>prf.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\asconmac\armv7m\prf.c</FilePath>
+              <FilePath>..\asconmac\armv7m_small\prf.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -604,7 +604,7 @@
             <File>
               <FileName>aead.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\asconaead\armv7m\aead.c</FilePath>
+              <FilePath>..\asconaead\armv7m_small\aead.c</FilePath>
             </File>
           </Files>
         </Group>
