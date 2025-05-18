@@ -174,7 +174,7 @@ void delay_us(uint16_t us) {
 void led_flashing(GPIO_TypeDef *port, uint16_t pin, uint8_t time)
 {
 	for (uint8_t idx = 0; idx < time * 2; idx++) {
-		HAL_GPIO_TogglePin(port, pin);
+		//HAL_GPIO_TogglePin(port, pin);
 		HAL_Delay(200);
 	}
 }
@@ -286,6 +286,23 @@ int32_t decrypt_lorawan(uint8_t *lora_raw_data, uint8_t size, struct loramac_phy
 		return -2;
 	}
 	loramac_fill_mac_payload(payload, payload->mac_payload.f_port, out_frm_payload);
+	return 0;
+}
+
+int32_t enable_peripherals_clock(void)
+{
+	__HAL_RCC_SPI1_CLK_ENABLE();
+	__HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+	return 0;
+}
+
+int32_t disable_peripherals_clock(void)
+{
+	__HAL_RCC_SPI1_CLK_DISABLE();
+	__HAL_RCC_GPIOC_CLK_DISABLE();
+  __HAL_RCC_GPIOA_CLK_DISABLE();
+	TIM4_Disable();
 	return 0;
 }
 /* USER CODE END 0 */
@@ -483,6 +500,9 @@ exit_tx:
 				LoRa_gotoMode(&myLoRa, STNBY_MODE);
 				LoRa_setFrequency(&myLoRa, 921400000);
 				LoRa_startReceiving(&myLoRa);
+
+				disable_peripherals_clock();
+
 				prog.fsm = LORA_RX;
 			}
 		}
@@ -500,6 +520,8 @@ exit_tx:
 		}
 		/* Start SYSTICK again */
 		HAL_ResumeTick();
+		/* Enable peripherals clocks */
+		enable_peripherals_clock();
 		/* Disable timer interrupt to process other things */
 		TIM2_Disable_IT();
 		
