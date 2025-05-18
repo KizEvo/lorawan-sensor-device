@@ -341,7 +341,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F103xB</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include;../LoRa;../MDK-ARM;../LoRaMAC;..\asconmac\armv7m_small;../asconmac/interface;../secrets;..\asconaead\armv7m_small;..\asconaead\interface</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include;../LoRa;../MDK-ARM;../LoRaMAC;../asconmac/armv7m_small;../asconmac/interface;../secrets;../asconaead/armv7m_small;../asconaead/interface</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
