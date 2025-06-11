@@ -18,19 +18,23 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "i2c.h"
 #include "spi.h"
 #include "tim.h"
+#include "usart.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "LoRa.h"
+#include "BME280_STM32.h"
 #include "dht11.h"
 #include "loramac.h"
 #include "secrets.h"
 #include "crypto_auth.h"
 #include "crypto_aead.h"
 #include <string.h>
+#include <stdio.h>
 #include <time.h>
 //#include "secrets.h"
 //#include "cc20_p1305.h"
@@ -66,6 +70,7 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 //#define TEST_PKT 1
+#define UART_DBG 1
 
 #define TIME_SLEEP_MAX 1
 #define RX_BUFFER_SIZE 255
@@ -114,7 +119,18 @@ static volatile uint8_t lorawan_rx_buf_size;
 static volatile uint8_t lorawan_is_tx;
 static struct loramac_phys_payload lorawan_rx_phys;
 
-dht11 myDHT11;
+static uint8_t myData[5] = {0};
+float Temperature = 0, Pressure = 0, Humidity = 0;
+
+void log_debug(const char *string)
+{
+#ifdef UART_DBG
+	HAL_UART_Transmit(&huart1, (const uint8_t *)string, strlen(string), 1000);
+	HAL_Delay(1);
+#else
+	(void *)string;
+#endif
+}
 
 void TIM4_EnablePeripheral(void)
 {
@@ -169,14 +185,6 @@ void delay_us(uint16_t us) {
 
     // Stop the timer to save power
     TIM4_Disable();
-}
-
-void led_flashing(GPIO_TypeDef *port, uint16_t pin, uint8_t time)
-{
-	for (uint8_t idx = 0; idx < time * 2; idx++) {
-		//HAL_GPIO_TogglePin(port, pin);
-		HAL_Delay(200);
-	}
 }
 
 void reverse_bytes(uint8_t *bytes, size_t size)
@@ -305,6 +313,24 @@ int32_t disable_peripherals_clock(void)
 	TIM4_Disable();
 	return 0;
 }
+
+// Sensor output is float Temperature, Humidity and Pressure. It's declared as global variables
+void read_sensor()
+{
+	char buffer[256] = {0};
+	BME280_WakeUP();
+	BME280_Measure();
+	myData[0] = (uint8_t)Humidity;
+	myData[1] = ((uint8_t)(Humidity * 10)) % 10;
+	myData[2] = (uint8_t)Temperature;
+	myData[3] = ((uint8_t)(Temperature * 10)) % 10;
+	myData[4] = myData[0] + myData[1] + myData[2] + myData[3];
+#ifdef UART_DBG
+	snprintf(buffer, sizeof(buffer), "[read_sensor] T: %.2f - H: %.2f\n\r", Temperature, Humidity);
+	log_debug(buffer);
+#endif
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -340,10 +366,16 @@ int main(void)
   MX_SPI1_Init();
   MX_TIM4_Init();
   MX_TIM2_Init();
+  MX_I2C1_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 	TIM4_EnablePeripheral();
 	TIM2_EnablePeripheral_IT();
-		
+
+  /*Configure GPIO SDO low*/
+  HAL_GPIO_WritePin(SDO_GPIO_Port, SDO_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(CSB_GPIO_Port, CSB_Pin, GPIO_PIN_SET);
+
 	myLoRa = newLoRa();
 
 	myLoRa.CS_port         = NSS_GPIO_Port;
@@ -353,23 +385,27 @@ int main(void)
 	myLoRa.DIO0_port       = DIO0_GPIO_Port;
 	myLoRa.DIO0_pin        = DIO0_Pin;
 	myLoRa.hSPIx           = &hspi1;
-	
-	myDHT11.data_port = DHT11_GPIO_Port;
-	myDHT11.data_pin = DHT11_Pin;
 
 
 	HAL_Delay(3000);
+	
+	// Init sensor
+	log_debug("[main] Sys, LoRa and sensor Init\n\r");
 
 	if (LoRa_init(&myLoRa) == LORA_OK) {
 		LoRa_stat = 1;
-	}
-	if (LoRa_stat) {
 		LoRa_setSyncWord(&myLoRa, 0x12);
+	} else {
+		log_debug("[main] FAILED: config LoRa\n\r");
 	}
+
+	while (BME280_Config(OSRS_1, OSRS_1, OSRS_1, MODE_FORCED, T_SB_0p5, IIR_OFF)) {
+		LoRa_stat = 0;
+		log_debug("[main] FAILED: config BME280\n\r");
+		HAL_Delay(1000);
+	}
+
 	LoRa_startReceiving(&myLoRa);
-	if (dht11_init(&myDHT11) == 0) {
-		led_flashing(LED_GPIO_Port, LED_Pin, 5);
-	}
 
 	uint8_t time_sleep = 5;
 	
@@ -378,9 +414,8 @@ int main(void)
 	uint8_t lorawan_package[30] = {0};
 	uint8_t lorawan_package_length = 0;
 	uint8_t lorawan_decrypted_out_size = 0;
-	if (loramac_pack_join_request(&loramac_jr, appeui, deveui, devnonce, appkey) == 0) {
-		led_flashing(LED_GPIO_Port, LED_Pin, 3);
-	}
+	uint8_t data_size;
+	loramac_pack_join_request(&loramac_jr, appeui, deveui, devnonce, appkey);
 
 #ifdef TEST_PKT
 	loramac_payload_test = &_loramac_payload_test;
@@ -392,32 +427,37 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+	log_debug("[main] Done system config\n\r");
   while (1)
   {
 		if (time_sleep >= TIME_SLEEP_MAX) {
 			time_sleep = 0;
 			// If LoRa received packet, process it
 			if (prog.fsm == LORA_RX_PKT_RDY) {
+				log_debug("[main] Received downlink message\n\r");
 				// Check join-accept
 				if (!prog.joined) {
 					uint8_t m_hdr = lorawan_rx_buffer[0];
 					if (m_hdr == LORAMAC_PHYS_PAYLOAD_JOIN_ACCEPT) {
 						// Encrypt the payload to get DevAddr (assigned by Network server), AppsKey and NwKsKey
 						if (process_lorawan_join_accept(nwkskey, appskey, &dev_addr, (uint8_t *)lorawan_rx_buffer) == 0) {
-							led_flashing(LED_GPIO_Port, LED_Pin, 2);
+							log_debug("[main] Valid join-accept\n\r");
 							prog.joined = 1;
+						} else {
+							log_debug("[main] Invalid join-accept\n\r");
 						}
 					}
 				} else {
 					int32_t ret = decrypt_lorawan((uint8_t *)lorawan_rx_buffer, lorawan_rx_buf_size, &lorawan_rx_phys, &lorawan_decrypted_out_size);
 					if (!ret) {
-						led_flashing(LED_GPIO_Port, LED_Pin, 2);
+						log_debug("[main] Valid downlink message\n\r");
 						// Toggle device, currently frm_payload is unused
 						// frm_payload is in lorawan_rx_phys
 						if (lorawan_decrypted_out_size == 3) {
 							LoRa_stat ^= 0x1;
-							HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
 						}
+					} else {
+						log_debug("[main] Invalid downlink message");
 					}
 				}
 			}
@@ -426,30 +466,15 @@ int main(void)
 				// Perform join-request at startup
 				if (!prog.joined) {
 					prog.fsm = LORA_TX_JOIN_REQ_STARTED;
+					log_debug("[main] Send join-request\n\r");
 					// Transmit join-request message
-					if (LoRa_transmit(&myLoRa, (uint8_t *)loramac_jr, sizeof(struct loramac_phys_payload_join_request), 1000)){
-						led_flashing(LED_GPIO_Port, LED_Pin, 2);
-					}
+					LoRa_transmit(&myLoRa, (uint8_t *)loramac_jr, sizeof(struct loramac_phys_payload_join_request), 1000);
 					// Now wait for downlink join-accept message
 				} else if (prog.joined && prog.fsm != LORA_RX_PKT_RDY) {
-					memset(myDHT11.data, 0, sizeof(myDHT11.data));
-					// Retry reading from DHT sensor
-					uint32_t retry, data_size;
-					for (retry = 0; retry < 2; retry++) {
-						if (dht11_read(&myDHT11) == 0) {
-							// Indicate read success
-							led_flashing(LED_GPIO_Port, LED_Pin, 1);
-							break;
-						}
-					}
-					// Exit if cannot read
-					if (retry >= 2) {
-						goto exit_tx;
-					}
-					// Set state to TX
+					// Perform sensor measurement
+					read_sensor();
 					prog.fsm = LORA_TX;
-					// Get size of DHT sensor
-					data_size = sizeof(myDHT11.data);
+					data_size = sizeof(myData);
 #ifdef TEST_PKT
 					// Ensure TIM4 clock is enabled
 					__HAL_RCC_TIM4_CLK_ENABLE();
@@ -460,7 +485,8 @@ int main(void)
 					start = __HAL_TIM_GET_COUNTER(&htim4);
 #endif
 					// Encrypt and package the LoRaWAN packet
-					if (encrypt_lorawan(loramac_payload, myDHT11.data, data_size, loramac_f_cnt, 1, 0, lorawan_package, &lorawan_package_length)) {
+					if (encrypt_lorawan(loramac_payload, myData, data_size, loramac_f_cnt, 1, 0, lorawan_package, &lorawan_package_length)) {
+						log_debug("[main] FAILED: Encrypt LoRa message\n\r");
 						goto exit_tx;
 					}
 #ifdef TEST_PKT
@@ -481,53 +507,49 @@ int main(void)
 						// Transmit it
 						if (lorawan_transmit(&myLoRa, lorawan_package, lorawan_package_length, 920200000) == 0) {
 							loramac_f_cnt += 1;
-							led_flashing(LED_GPIO_Port, LED_Pin, 5);
 						}
-					} else {
-						led_flashing(LED_GPIO_Port, LED_Pin, 2);
 					}
 #else
 					// Transmit using LoRa transceiver module
+					log_debug("[main] Sending LoRa message\n\r");
 					if (lorawan_transmit(&myLoRa, lorawan_package, lorawan_package_length, 920200000) == 0) {
 						loramac_f_cnt += 1;
-						led_flashing(LED_GPIO_Port, LED_Pin, 5);
 					}
 #endif
-				} else {
-exit_tx:
-					HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
 				}
+exit_tx:
+				prog.fsm = LORA_RX;
 				LoRa_gotoMode(&myLoRa, STNBY_MODE);
 				LoRa_setFrequency(&myLoRa, 921400000);
 				LoRa_startReceiving(&myLoRa);
-
-				disable_peripherals_clock();
-
-				prog.fsm = LORA_RX;
+				// RX1 RECEIVE_DELAY1
+				HAL_Delay(4000);
 			}
 		}
-		/* Start timer interrupt */
-		TIM2_Start_IT();
-		/* Suspend SYSTICK to not wake up from sleep */
-		HAL_SuspendTick();
-		prog.fsm = MCU_SLEEP;
-		/* Enter sleep mode, will be wake up by timer*/
-		HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
-		/* Check if wake from GPIO_EXTI */
-		while (prog.fsm == LORA_GPIO_INT) {
-			/* Sleep again */
+		// Sleep if didn't receive any downlink
+		if (prog.fsm != LORA_RX_PKT_RDY) {
+			LoRa_gotoMode(&myLoRa, SLEEP_MODE);
+			log_debug("[main] Entering sleep mode\n\r");
+			/* Start timer interrupt */
+			TIM2_Start_IT();
+			/* Suspend SYSTICK to not wake up from sleep */
+			HAL_SuspendTick();
+			prog.fsm = MCU_SLEEP;
+			/* Enter sleep mode, will be wake up by timer*/
 			HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
+			/* Check if wake from GPIO_EXTI */
+			while (prog.fsm == LORA_GPIO_INT) {
+				/* Sleep again */
+				HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
+			}
+			/* Start SYSTICK again */
+			HAL_ResumeTick();
+			/* Enable peripherals clocks */
+			/* Disable timer interrupt to process other things */
+			TIM2_Disable_IT();
+			log_debug("[main] Wake from sleep mode\n\r");
 		}
-		/* Start SYSTICK again */
-		HAL_ResumeTick();
-		/* Enable peripherals clocks */
-		enable_peripherals_clock();
-		/* Disable timer interrupt to process other things */
-		TIM2_Disable_IT();
-		
 		time_sleep++;
-		
-		led_flashing(LED_GPIO_Port, LED_Pin, 3);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -561,8 +583,8 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV4;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
@@ -605,6 +627,7 @@ void Error_Handler(void)
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
+	log_debug("[main] ERROR HANDLER");
   while (1)
   {
   }
