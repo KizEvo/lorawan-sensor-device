@@ -810,6 +810,11 @@
               <FileType>1</FileType>
               <FilePath>.\BME280_STM32.c</FilePath>
             </File>
+            <File>
+              <FileName>FlASH_PAGE_F1.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\FlASH_PAGE_F1.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

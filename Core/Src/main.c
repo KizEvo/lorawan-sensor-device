@@ -28,6 +28,7 @@
 /* USER CODE BEGIN Includes */
 #include "LoRa.h"
 #include "BME280_STM32.h"
+#include "FLASH_PAGE_F1.h"
 #include "dht11.h"
 #include "loramac.h"
 #include "secrets.h"
@@ -78,6 +79,8 @@ void SystemClock_Config(void);
 #define LE_BYTES_TO_UINT32(x) ((*(x + 3)) << 24) | ((*(x + 2)) << 16) | ((*(x + 1)) << 8) | ((*(x)))
 #define LE_BYTES_TO_UINT16(x) ((*(x + 1)) << 8) | ((*(x)))
 
+#define APPNONCE_STORAGE_LOCATION 0x0800C000
+
 struct program_state {
 	/* State in enum PROG_FSM */
 	uint8_t fsm;
@@ -103,7 +106,7 @@ static uint8_t deveui[8] = {DEV_EUI};
 static uint8_t appkey[16] = {APP_KEY};
 static uint8_t devnonce[2] = {0};
 // need to store fetch this in FLASH
-static uint8_t appnonce[3] = {0xA0, 0xA0, 0xA0};
+static uint8_t appnonce[3] = {0, 0, 0};
 
 static uint32_t start, end;
 
@@ -221,9 +224,14 @@ int32_t process_lorawan_join_accept(uint8_t *nwkskey_out, uint8_t *appskey_out, 
 {
 
 	uint8_t i;
-	// TODO:
 	// Fetch AppNonce from Flash
-	// appnonce
+	// already fetch when init
+	uint32_t appnonce_uint = (appnonce[2] << 16) | (appnonce[1] << 8) | appnonce[0];
+	appnonce_uint++;
+	
+	appnonce[0] = appnonce_uint & 0xFF;
+	appnonce[1] = (appnonce_uint >> 8) & 0xFF;
+	appnonce[2] = (appnonce_uint >> 16) & 0xFF;
 
 	// JoinAccept Noince = MHDR + AppNonce + Padding
 	nonce[0] = in[0];
@@ -251,6 +259,9 @@ int32_t process_lorawan_join_accept(uint8_t *nwkskey_out, uint8_t *appskey_out, 
 
 	// get devaddr
 	*dev_addr_out = LE_BYTES_TO_UINT32(ja_encrypt_out.dev_addr);
+
+	// Write back
+	Flash_Write_Data(APPNONCE_STORAGE_LOCATION, &appnonce_uint, 1);
 
 	return 0;
 }
@@ -388,9 +399,13 @@ int main(void)
 
 
 	HAL_Delay(3000);
-	
-	// Init sensor
-	log_debug("[main] Sys, LoRa and sensor Init\n\r");
+
+	// Read join-accept appnonce
+	uint32_t dataRead = 0;
+	Flash_Read_Data(APPNONCE_STORAGE_LOCATION, &dataRead, 1);
+	appnonce[0] = dataRead & 0xFF;
+	appnonce[1] = (dataRead >> 8) & 0xFF;
+	appnonce[2] = (dataRead >> 16) & 0xFF;
 
 	if (LoRa_init(&myLoRa) == LORA_OK) {
 		LoRa_stat = 1;
