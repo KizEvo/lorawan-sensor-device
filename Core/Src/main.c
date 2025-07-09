@@ -29,7 +29,6 @@
 #include "LoRa.h"
 #include "BME280_STM32.h"
 #include "FLASH_PAGE_F1.h"
-#include "dht11.h"
 #include "loramac.h"
 #include "secrets.h"
 #include "crypto_auth.h"
@@ -71,7 +70,7 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 //#define TEST_PKT 1
-#define UART_DBG 1
+//#define UART_DBG 1
 
 #define TIME_SLEEP_MAX 1
 #define RX_BUFFER_SIZE 255
@@ -131,7 +130,7 @@ void log_debug(const char *string)
 	HAL_UART_Transmit(&huart1, (const uint8_t *)string, strlen(string), 1000);
 	HAL_Delay(1);
 #else
-	(void *)string;
+	(void)string;
 #endif
 }
 
@@ -411,12 +410,12 @@ int main(void)
 		LoRa_stat = 1;
 		LoRa_setSyncWord(&myLoRa, 0x12);
 	} else {
-		log_debug("[main] FAILED: config LoRa\n\r");
+		//log_debug("[main] FAILED: config LoRa\n\r");
 	}
 
 	while (BME280_Config(OSRS_1, OSRS_1, OSRS_1, MODE_FORCED, T_SB_0p5, IIR_OFF)) {
 		LoRa_stat = 0;
-		log_debug("[main] FAILED: config BME280\n\r");
+		//log_debug("[main] FAILED: config BME280\n\r");
 		HAL_Delay(1000);
 	}
 
@@ -442,37 +441,37 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-	log_debug("[main] Done system config\n\r");
+	//log_debug("[main] Done system config\n\r");
   while (1)
   {
 		if (time_sleep >= TIME_SLEEP_MAX) {
 			time_sleep = 0;
 			// If LoRa received packet, process it
 			if (prog.fsm == LORA_RX_PKT_RDY) {
-				log_debug("[main] Received downlink message\n\r");
+				//log_debug("[main] Received downlink message\n\r");
 				// Check join-accept
 				if (!prog.joined) {
 					uint8_t m_hdr = lorawan_rx_buffer[0];
 					if (m_hdr == LORAMAC_PHYS_PAYLOAD_JOIN_ACCEPT) {
 						// Encrypt the payload to get DevAddr (assigned by Network server), AppsKey and NwKsKey
 						if (process_lorawan_join_accept(nwkskey, appskey, &dev_addr, (uint8_t *)lorawan_rx_buffer) == 0) {
-							log_debug("[main] Valid join-accept\n\r");
+							//log_debug("[main] Valid join-accept\n\r");
 							prog.joined = 1;
 						} else {
-							log_debug("[main] Invalid join-accept\n\r");
+							//log_debug("[main] Invalid join-accept\n\r");
 						}
 					}
 				} else {
 					int32_t ret = decrypt_lorawan((uint8_t *)lorawan_rx_buffer, lorawan_rx_buf_size, &lorawan_rx_phys, &lorawan_decrypted_out_size);
 					if (!ret) {
-						log_debug("[main] Valid downlink message\n\r");
+						//log_debug("[main] Valid downlink message\n\r");
 						// Toggle device, currently frm_payload is unused
 						// frm_payload is in lorawan_rx_phys
 						if (lorawan_decrypted_out_size == 3) {
 							LoRa_stat ^= 0x1;
 						}
 					} else {
-						log_debug("[main] Invalid downlink message");
+						//log_debug("[main] Invalid downlink message");
 					}
 				}
 			}
@@ -481,7 +480,7 @@ int main(void)
 				// Perform join-request at startup
 				if (!prog.joined) {
 					prog.fsm = LORA_TX_JOIN_REQ_STARTED;
-					log_debug("[main] Send join-request\n\r");
+					//log_debug("[main] Send join-request\n\r");
 					// Transmit join-request message
 					LoRa_transmit(&myLoRa, (uint8_t *)loramac_jr, sizeof(struct loramac_phys_payload_join_request), 1000);
 					// Now wait for downlink join-accept message
@@ -501,7 +500,7 @@ int main(void)
 #endif
 					// Encrypt and package the LoRaWAN packet
 					if (encrypt_lorawan(loramac_payload, myData, data_size, loramac_f_cnt, 1, 0, lorawan_package, &lorawan_package_length)) {
-						log_debug("[main] FAILED: Encrypt LoRa message\n\r");
+						//log_debug("[main] FAILED: Encrypt LoRa message\n\r");
 						goto exit_tx;
 					}
 #ifdef TEST_PKT
@@ -526,7 +525,7 @@ int main(void)
 					}
 #else
 					// Transmit using LoRa transceiver module
-					log_debug("[main] Sending LoRa message\n\r");
+					//log_debug("[main] Sending LoRa message\n\r");
 					if (lorawan_transmit(&myLoRa, lorawan_package, lorawan_package_length, 920200000) == 0) {
 						loramac_f_cnt += 1;
 					}
@@ -544,7 +543,7 @@ exit_tx:
 		// Sleep if didn't receive any downlink
 		if (prog.fsm != LORA_RX_PKT_RDY) {
 			LoRa_gotoMode(&myLoRa, SLEEP_MODE);
-			log_debug("[main] Entering sleep mode\n\r");
+			//log_debug("[main] Entering sleep mode\n\r");
 			/* Start timer interrupt */
 			TIM2_Start_IT();
 			/* Suspend SYSTICK to not wake up from sleep */
@@ -562,7 +561,7 @@ exit_tx:
 			/* Enable peripherals clocks */
 			/* Disable timer interrupt to process other things */
 			TIM2_Disable_IT();
-			log_debug("[main] Wake from sleep mode\n\r");
+			//log_debug("[main] Wake from sleep mode\n\r");
 		}
 		time_sleep++;
     /* USER CODE END WHILE */
@@ -642,7 +641,7 @@ void Error_Handler(void)
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
-	log_debug("[main] ERROR HANDLER");
+	//log_debug("[main] ERROR HANDLER");
   while (1)
   {
   }

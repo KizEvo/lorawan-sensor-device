@@ -796,11 +796,6 @@
               <FilePath>..\LoRa\LoRa.c</FilePath>
             </File>
             <File>
-              <FileName>dht11.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\dht11.c</FilePath>
-            </File>
-            <File>
               <FileName>loramac.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\LoRaMAC\loramac.c</FilePath>
