@@ -69,8 +69,9 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-#define TEST_PKT 1
-//#define UART_DBG 1
+//#define TEST_PKT 1
+#define UART_DBG 1
+#define UART_DBG_TIME 1
 
 #define TIME_SLEEP_MAX 1
 #define RX_BUFFER_SIZE 255
@@ -127,10 +128,28 @@ float Temperature = 0, Pressure = 0, Humidity = 0;
 void log_debug(const char *string)
 {
 #ifdef UART_DBG
-	HAL_UART_Transmit(&huart1, (const uint8_t *)string, strlen(string), 1000);
+	HAL_UART_Transmit(&huart1, (const uint8_t *)string, strlen(string), 5000);
 	HAL_Delay(1);
 #else
 	(void)string;
+#endif
+}
+
+void log_debug_array(const char *string, uint8_t *array, uint8_t size)
+{
+#ifdef UART_DBG
+	char buffer[512] ={0};
+  int offset = 0;
+	offset += snprintf(buffer + offset, 512 - offset, "%s: ", string);
+  for (uint8_t i = 0; i < size; i++) {
+    offset += snprintf(buffer + offset, 512 - offset, "%.2x ", array[i]);
+  }
+	snprintf(buffer + offset, 512 - offset, "\r\n");
+	log_debug(buffer);
+#else
+	(void)string;
+	(void)array;
+	(void)size;
 #endif
 }
 
@@ -221,8 +240,10 @@ static uint64_t ja_size_out = 0;
 
 int32_t process_lorawan_join_accept(uint8_t *nwkskey_out, uint8_t *appskey_out, uint32_t *dev_addr_out, uint8_t *in)
 {
-
 	uint8_t i;
+#ifndef UART_DBG_TIME
+	log_debug_array("EncJoinAcc", in, sizeof(struct loramac_phys_payload_join_accept));
+#endif
 	// Fetch AppNonce from Flash
 	// already fetch when init
 	uint32_t appnonce_uint = (appnonce[2] << 16) | (appnonce[1] << 8) | appnonce[0];
@@ -248,14 +269,22 @@ int32_t process_lorawan_join_accept(uint8_t *nwkskey_out, uint8_t *appskey_out, 
 	if (retval){
 		return retval;
 	}
-
+	
+	ja_encrypt_out.m_hdr = in[0]; // MHDR for debugging only, this field is unused
+#ifndef UART_DBG_TIME
+	log_debug_array("DecJoinAcc", &ja_encrypt_out.m_hdr, sizeof(struct loramac_phys_payload_join_accept) - 16);
+#endif
 	// get appskey
 	memcpy(ja_keys_in.app_nonce, ja_encrypt_out.app_nonce, 3);
 	memcpy(ja_keys_in.net_id, ja_encrypt_out.net_id, 3);
-	memcpy(ja_keys_in.dev_nonce, devnonce, 2);
+	//little endian
+	ja_keys_in.dev_nonce[0] = devnonce[1];
+	ja_keys_in.dev_nonce[1] = devnonce[0];
 	ja_keys_in.byte1 = 0x02;
 	crypto_auth(appskey_out, &ja_keys_in.byte1, sizeof(struct join_accept_xskey_input), appkey);
-
+#ifndef UART_DBG_TIME
+	log_debug_array("AppSKey", appskey_out, 16);
+#endif
 	// get devaddr
 	*dev_addr_out = LE_BYTES_TO_UINT32(ja_encrypt_out.dev_addr);
 
@@ -327,7 +356,7 @@ int32_t disable_peripherals_clock(void)
 // Sensor output is float Temperature, Humidity and Pressure. It's declared as global variables
 void read_sensor()
 {
-	char buffer[256] = {0};
+	char buffer[128] = {0};
 	BME280_WakeUP();
 	BME280_Measure();
 	myData[0] = (uint8_t)Humidity;
@@ -336,8 +365,10 @@ void read_sensor()
 	myData[3] = ((uint8_t)(Temperature * 10)) % 10;
 	myData[4] = myData[0] + myData[1] + myData[2] + myData[3];
 #ifdef UART_DBG
+	#ifndef UART_DBG_TIME
 	snprintf(buffer, sizeof(buffer), "[read_sensor] T: %.2f - H: %.2f\n\r", Temperature, Humidity);
 	log_debug(buffer);
+	#endif
 #endif
 }
 
@@ -397,7 +428,7 @@ int main(void)
 	myLoRa.hSPIx           = &hspi1;
 
 
-	HAL_Delay(3000);
+	HAL_Delay(5000);
 
 	// Read join-accept appnonce
 	uint32_t dataRead = 0;
@@ -429,7 +460,10 @@ int main(void)
 	uint8_t lorawan_package_length = 0;
 	uint8_t lorawan_decrypted_out_size = 0;
 	uint8_t data_size;
+	
+	devnonce[0] = LoRa_getRSSI(&myLoRa);
 	loramac_pack_join_request(&loramac_jr, appeui, deveui, devnonce, appkey);
+	log_debug_array("TxJoinReq", &loramac_jr->m_hdr, sizeof(struct loramac_phys_payload_join_request));
 
 #ifdef TEST_PKT
 	loramac_payload_test = &_loramac_payload_test;
@@ -441,21 +475,37 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-	//log_debug("[main] Done system config\n\r");
+
+	//log_debug("[main] Done system cfg\n\r");
   while (1)
   {
+		
+#ifdef UART_DBG_TIME
+		log_debug("[main] Measure execution time\r\n");
+		__HAL_RCC_TIM4_CLK_ENABLE();
+		TIM4_Start();
+
+		// Reset the counter
+		__HAL_TIM_SET_COUNTER(&htim4, 0);
+		start = __HAL_TIM_GET_COUNTER(&htim4);
+#endif
+		
 		if (time_sleep >= TIME_SLEEP_MAX) {
 			time_sleep = 0;
 			// If LoRa received packet, process it
 			if (prog.fsm == LORA_RX_PKT_RDY) {
-				//log_debug("[main] Received downlink message\n\r");
+				#ifndef UART_DBG_TIME
+				log_debug("[main] Received downlink msg\n\r");
+				#endif
 				// Check join-accept
 				if (!prog.joined) {
 					uint8_t m_hdr = lorawan_rx_buffer[0];
 					if (m_hdr == LORAMAC_PHYS_PAYLOAD_JOIN_ACCEPT) {
 						// Encrypt the payload to get DevAddr (assigned by Network server), AppsKey and NwKsKey
 						if (process_lorawan_join_accept(nwkskey, appskey, &dev_addr, (uint8_t *)lorawan_rx_buffer) == 0) {
-							//log_debug("[main] Valid join-accept\n\r");
+							#ifndef UART_DBG_TIME
+							log_debug("[main] Valid join-accept\n\r");
+							#endif
 							prog.joined = 1;
 						} else {
 							//log_debug("[main] Invalid join-accept\n\r");
@@ -464,7 +514,9 @@ int main(void)
 				} else {
 					int32_t ret = decrypt_lorawan((uint8_t *)lorawan_rx_buffer, lorawan_rx_buf_size, &lorawan_rx_phys, &lorawan_decrypted_out_size);
 					if (!ret) {
-						//log_debug("[main] Valid downlink message\n\r");
+						#ifndef UART_DBG_TIME
+						log_debug("[main] Valid downlink msg\n\r");
+						#endif
 						// Toggle device, currently frm_payload is unused
 						// frm_payload is in lorawan_rx_phys
 						if (lorawan_decrypted_out_size == 3) {
@@ -480,7 +532,9 @@ int main(void)
 				// Perform join-request at startup
 				if (!prog.joined) {
 					prog.fsm = LORA_TX_JOIN_REQ_STARTED;
-					//log_debug("[main] Send join-request\n\r");
+					#ifndef UART_DBG_TIME
+					log_debug("[main] Send join-request\n\r");
+					#endif
 					// Transmit join-request message
 					LoRa_transmit(&myLoRa, (uint8_t *)loramac_jr, sizeof(struct loramac_phys_payload_join_request), 1000);
 					// Now wait for downlink join-accept message
@@ -525,7 +579,10 @@ int main(void)
 					}
 #else
 					// Transmit using LoRa transceiver module
-					//log_debug("[main] Sending LoRa message\n\r");
+					#ifndef UART_DBG_TIME
+					log_debug("[main] Send LoRa uplink\n\r");
+					log_debug_array("EncTxPacket", lorawan_package, lorawan_package_length);
+					#endif
 					if (lorawan_transmit(&myLoRa, lorawan_package, lorawan_package_length, 920200000) == 0) {
 						loramac_f_cnt += 1;
 					}
@@ -536,6 +593,15 @@ exit_tx:
 				LoRa_gotoMode(&myLoRa, STNBY_MODE);
 				LoRa_setFrequency(&myLoRa, 921400000);
 				LoRa_startReceiving(&myLoRa);
+
+#ifdef UART_DBG_TIME
+				// Get the timer counter
+				end = __HAL_TIM_GET_COUNTER(&htim4);
+				// End time
+				TIM4_Disable();
+				log_debug_array("TimeElapsedLittleEndian", (uint8_t *)&end, 4);
+				log_debug("[main] Open receive window\n\r");
+#endif
 				// RX1 RECEIVE_DELAY1
 				HAL_Delay(4000);
 			}
@@ -543,7 +609,7 @@ exit_tx:
 		// Sleep if didn't receive any downlink
 		if (prog.fsm != LORA_RX_PKT_RDY) {
 			LoRa_gotoMode(&myLoRa, SLEEP_MODE);
-			//log_debug("[main] Entering sleep mode\n\r");
+			log_debug("[main] Sleep mode\n\r");
 			/* Start timer interrupt */
 			TIM2_Start_IT();
 			/* Suspend SYSTICK to not wake up from sleep */
@@ -561,7 +627,7 @@ exit_tx:
 			/* Enable peripherals clocks */
 			/* Disable timer interrupt to process other things */
 			TIM2_Disable_IT();
-			//log_debug("[main] Wake from sleep mode\n\r");
+			//log_debug("[main] Wakeup\n\r");
 		}
 		time_sleep++;
     /* USER CODE END WHILE */
